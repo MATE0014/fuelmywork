@@ -124,3 +124,17 @@
   }
 }
 
+/* Hiding scrollbar for multiple browsers */
+@layer base {
+  *::-webkit-scrollbar {
+    display: none;
+  }
+
+  * {
+    scrollbar-width: none;
+  }
+
+  * {
+    -ms-overflow-style: none;
+  }
+}
