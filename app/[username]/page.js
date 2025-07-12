@@ -1,92 +1,131 @@
 "use client"
 
+import { useState, useEffect } from "react"
+import { useParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, Heart, Users, Share2, User, IndianRupee } from "lucide-react"
-import { useEffect, useState, use } from "react"
-import { useRouter } from "next/navigation"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { useAuth } from "@/contexts/AuthContext"
 import { toast } from "sonner"
+import {
+  User,
+  Heart,
+  Share2,
+  Calendar,
+  Loader2,
+  CreditCard,
+  QrCode,
+  Copy,
+  CheckCircle,
+  ArrowLeft,
+  Users,
+  IndianRupee,
+  Shield,
+  AlertCircle,
+} from "lucide-react"
 
-export default function UserProfile({ params }) {
-  const resolvedParams = use(params)
+const UserProfile = () => {
+  const params = useParams()
   const router = useRouter()
+  const { user } = useAuth()
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [notFound, setNotFound] = useState(false)
+  const [error, setError] = useState("")
   const [supporters, setSupporters] = useState([])
-  const [supportAmount, setSupportAmount] = useState("")
+  const [supportersLoading, setSupportersLoading] = useState(false)
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false)
+  const [paymentAmount, setPaymentAmount] = useState("")
   const [customAmount, setCustomAmount] = useState("")
   const [supporterName, setSupporterName] = useState("")
-  const [supportMessage, setSupportMessage] = useState("")
-  const [processingPayment, setProcessingPayment] = useState(false)
+  const [paymentMessage, setPaymentMessage] = useState("")
+  const [paymentLoading, setPaymentLoading] = useState(false)
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("razorpay")
 
+  const username = params?.username
   const defaultAmounts = [50, 100, 250, 500, 1000]
 
   useEffect(() => {
-    if (resolvedParams?.username) {
-      loadUserProfile(resolvedParams.username)
-      loadSupporters(resolvedParams.username)
+    if (username) {
+      fetchProfile()
+      fetchSupporters()
     }
-  }, [resolvedParams?.username])
+  }, [username])
 
-  const loadUserProfile = async (username) => {
+  const fetchProfile = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`/api/user/profile-by-username?username=${username}`)
+      console.log("Fetching profile for username:", username)
 
-      if (response.status === 404) {
-        setNotFound(true)
-        return
-      }
+      const response = await fetch(`/api/user/profile-by-username?username=${username}`)
+      const data = await response.json()
 
       if (response.ok) {
-        const data = await response.json()
         setProfile(data)
+        console.log("Profile loaded:", data)
+
+        // Set default payment method based on availability
+        if (data.hasRazorpaySetup) {
+          setSelectedPaymentMethod("razorpay")
+        } else if (data.hasPersonalPayment) {
+          setSelectedPaymentMethod("personal")
+        }
       } else {
-        setNotFound(true)
+        setError(data.error || "Creator not found")
+        console.error("Failed to fetch profile:", data.error)
       }
     } catch (error) {
-      console.error("Error loading profile:", error)
-      setNotFound(true)
+      console.error("Error fetching profile:", error)
+      setError("Failed to load profile")
     } finally {
       setLoading(false)
     }
   }
 
-  const loadSupporters = async (username) => {
+  const fetchSupporters = async () => {
     try {
+      setSupportersLoading(true)
       const response = await fetch(`/api/supporters?username=${username}`)
       if (response.ok) {
         const data = await response.json()
         setSupporters(data.supporters || [])
+        console.log("Supporters loaded:", data.supporters?.length || 0)
       }
     } catch (error) {
-      console.error("Error loading supporters:", error)
+      console.error("Error fetching supporters:", error)
+    } finally {
+      setSupportersLoading(false)
     }
   }
 
+  const handleSupport = () => {
+    if (!user) {
+      router.push("/login")
+      return
+    }
+    // Pre-fill supporter name if user is logged in
+    if (user.name && !supporterName) {
+      setSupporterName(user.name)
+    }
+    setPaymentModalOpen(true)
+  }
+
   const handleAmountSelect = (amount) => {
-    setSupportAmount(amount.toString())
+    setPaymentAmount(amount.toString())
     setCustomAmount("")
   }
 
   const handleCustomAmountChange = (value) => {
     setCustomAmount(value)
-    setSupportAmount(value)
+    setPaymentAmount(value)
   }
 
-  const copyProfileLink = () => {
-    const profileUrl = window.location.href
-    navigator.clipboard.writeText(profileUrl)
-    toast.success("Profile link copied to clipboard!")
-  }
-
-  const handleSupport = async () => {
-    if (!supportAmount || Number.parseFloat(supportAmount) < 1) {
-      toast.error("Please enter a valid amount (minimum ₹1)")
+  const processRazorpayPayment = async () => {
+    if (!paymentAmount || Number.parseFloat(paymentAmount) < 1) {
+      toast.error("Please enter an amount of at least ₹1")
       return
     }
 
@@ -95,12 +134,7 @@ export default function UserProfile({ params }) {
       return
     }
 
-    if (!profile.razorpayId) {
-      toast.error("Creator hasn't set up payments yet")
-      return
-    }
-
-    setProcessingPayment(true)
+    setPaymentLoading(true)
 
     try {
       // Create order
@@ -110,30 +144,30 @@ export default function UserProfile({ params }) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          amount: Number.parseFloat(supportAmount),
-          creatorUsername: resolvedParams.username,
+          amount: Number.parseFloat(paymentAmount),
+          creatorUsername: username,
           supporterName: supporterName.trim(),
-          message: supportMessage.trim(),
+          supporterEmail: user?.email || "",
+          message: paymentMessage.trim(),
         }),
       })
 
-      if (!orderResponse.ok) {
-        throw new Error("Failed to create payment order")
-      }
-
       const orderData = await orderResponse.json()
 
-      // Initialize Razorpay
+      if (!orderResponse.ok) {
+        throw new Error(orderData.error || "Failed to create payment order")
+      }
+
+      // Initialize Razorpay payment
       const options = {
-        key: profile.razorpayId,
+        key: orderData.razorpayKeyId,
         amount: orderData.amount,
         currency: "INR",
-        name: "fuelmywork",
-        description: `Support ${profile.name || profile.username}`,
+        name: "FuelMyWork",
+        description: `Support for ${profile.name || profile.username}`,
         order_id: orderData.orderId,
         handler: async (response) => {
           try {
-            // Verify payment
             const verifyResponse = await fetch("/api/verify-payment", {
               method: "POST",
               headers: {
@@ -143,22 +177,24 @@ export default function UserProfile({ params }) {
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
-                creatorUsername: resolvedParams.username,
+                creatorUsername: username,
                 supporterName: supporterName.trim(),
-                message: supportMessage.trim(),
-                amount: Number.parseFloat(supportAmount),
+                message: paymentMessage.trim(),
+                amount: Number.parseFloat(paymentAmount),
               }),
             })
 
-            if (verifyResponse.ok) {
+            const verifyData = await verifyResponse.json()
+
+            if (verifyResponse.ok && verifyData.success) {
               toast.success("Payment successful! Thank you for your support!")
-              // Reset form
-              setSupportAmount("")
+              setPaymentModalOpen(false)
+              setPaymentAmount("")
               setCustomAmount("")
               setSupporterName("")
-              setSupportMessage("")
-              // Reload supporters
-              loadSupporters(resolvedParams.username)
+              setPaymentMessage("")
+              // Refresh supporters list
+              fetchSupporters()
             } else {
               toast.error("Payment verification failed")
             }
@@ -169,9 +205,15 @@ export default function UserProfile({ params }) {
         },
         prefill: {
           name: supporterName,
+          email: user?.email || "",
         },
         theme: {
           color: "#2563eb",
+        },
+        modal: {
+          ondismiss: () => {
+            setPaymentLoading(false)
+          },
         },
       }
 
@@ -179,280 +221,332 @@ export default function UserProfile({ params }) {
       rzp.open()
     } catch (error) {
       console.error("Payment error:", error)
-      toast.error("Failed to initiate payment")
+      toast.error(error.message || "Failed to process payment")
     } finally {
-      setProcessingPayment(false)
+      setPaymentLoading(false)
+    }
+  }
+
+  const handlePersonalPayment = async () => {
+    if (!paymentAmount || Number.parseFloat(paymentAmount) < 1) {
+      toast.error("Please enter an amount of at least ₹1")
+      return
+    }
+
+    if (!supporterName.trim()) {
+      toast.error("Please enter your name")
+      return
+    }
+
+    setPaymentLoading(true)
+
+    try {
+      // Add supporter to database for direct payment
+      const response = await fetch("/api/add-supporter", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          creatorUsername: username,
+          supporterName: supporterName.trim(),
+          amount: Number.parseFloat(paymentAmount),
+          message: paymentMessage.trim(),
+          paymentMethod: "direct",
+        }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        toast.success("Support recorded! Please complete the payment using the provided details.", {
+          description: "Your support will show as 'pending verification' until the creator confirms receipt.",
+          duration: 6000,
+        })
+
+        // Reset form and close modal
+        setPaymentAmount("")
+        setCustomAmount("")
+        setSupporterName("")
+        setPaymentMessage("")
+        setPaymentModalOpen(false)
+
+        // Refresh supporters list
+        fetchSupporters()
+      } else {
+        throw new Error(data.error || "Failed to record support")
+      }
+    } catch (error) {
+      console.error("Error recording support:", error)
+      toast.error(error.message || "Failed to record support")
+    } finally {
+      setPaymentLoading(false)
+    }
+  }
+
+  const copyUpiId = () => {
+    navigator.clipboard.writeText(profile.upiId)
+    toast.success("UPI ID copied to clipboard!")
+  }
+
+  const shareProfile = async () => {
+    const profileUrl = `${window.location.origin}/${username}`
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Support ${profile.name || profile.username}`,
+          text: `Check out ${profile.name || profile.username}'s profile on FuelMyWork`,
+          url: profileUrl,
+        })
+      } catch (error) {
+        // Fallback to clipboard
+        navigator.clipboard.writeText(profileUrl)
+        toast.success("Profile link copied to clipboard!")
+      }
+    } else {
+      // Fallback to clipboard
+      navigator.clipboard.writeText(profileUrl)
+      toast.success("Profile link copied to clipboard!")
     }
   }
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-950 text-white font-outfit flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p>Loading profile...</p>
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          <span>Loading profile...</span>
         </div>
       </div>
     )
   }
 
-  if (notFound) {
+  if (error) {
     return (
       <div className="min-h-screen bg-gray-950 text-white font-outfit flex items-center justify-center">
-        <div className="text-center max-w-md mx-auto px-6">
-          <div className="mb-8">
-            <div className="w-24 h-24 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-6">
-              <User className="h-12 w-12 text-gray-400" />
-            </div>
-            <h1 className="text-3xl font-bold mb-4">User Not Found</h1>
-            <p className="text-gray-400 mb-8">
-              The user "@{resolvedParams?.username}" doesn't exist or hasn't set up their profile yet.
-            </p>
-          </div>
-
-          <div className="space-y-4">
-            <Button onClick={() => router.push("/")} className="bg-blue-600 hover:bg-blue-700 text-white w-full">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Return to Home
-            </Button>
-            <Button
-              onClick={() => router.push("/login")}
-              variant="outline"
-              className="border-gray-600 text-gray-300 hover:bg-gray-800 hover:text-white bg-transparent w-full"
-            >
-              Create Your Profile
-            </Button>
-          </div>
+        <div className="text-center space-y-4">
+          <h1 className="text-2xl font-bold text-red-400">Profile Not Found</h1>
+          <p className="text-gray-400">{error}</p>
+          <Button onClick={() => router.push("/")} className="bg-blue-600 hover:bg-blue-700">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Go Home
+          </Button>
         </div>
       </div>
     )
   }
 
+  if (!profile) return null
+
   return (
-    <>
-      {/* Load Razorpay script */}
-      <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <div className="min-h-screen bg-gray-950 text-white font-outfit">
+      {/* Banner Section */}
+      <div className="relative">
+        {profile.bannerImage ? (
+          <div className="h-48 md:h-64 bg-gray-800 overflow-hidden">
+            <img src={profile.bannerImage || "/placeholder.svg"} alt="Banner" className="w-full h-full object-cover" />
+          </div>
+        ) : (
+          <div className="h-48 md:h-64 bg-gradient-to-r from-blue-600 to-purple-600"></div>
+        )}
 
-      <div className="min-h-screen bg-gray-950 text-white font-outfit">
-        {/* Back Button */}
-        <div className="absolute top-20 left-6 z-10">
-          <Button
-            onClick={() => router.push("/")}
-            variant="outline"
-            className="border-gray-600 bg-gray-900/80 backdrop-blur-sm text-gray-300 hover:bg-gray-800 hover:text-white"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Home
-          </Button>
-        </div>
-
-        {/* Banner Section */}
-        <div className="relative">
-          {/* Banner Image */}
-          <div className="h-64 md:h-80 bg-gradient-to-r from-blue-900 to-purple-900 overflow-hidden">
-            {profile.bannerImage ? (
+        {/* Profile Image */}
+        <div className="absolute -bottom-16 left-4 md:left-8">
+          <div className="w-32 h-32 bg-gray-800 rounded-full border-4 border-gray-950 overflow-hidden">
+            {profile.profileImage ? (
               <img
-                src={profile.bannerImage || "/placeholder.svg"}
-                alt="Banner"
+                src={profile.profileImage || "/placeholder.svg"}
+                alt={profile.name || profile.username}
                 className="w-full h-full object-cover"
               />
             ) : (
-              <div className="w-full h-full bg-gradient-to-r from-blue-900 to-purple-900"></div>
+              <div className="w-full h-full flex items-center justify-center bg-gray-700">
+                <User className="h-16 w-16 text-gray-400" />
+              </div>
             )}
           </div>
-
-          {/* Profile Picture - Positioned to overlap banner */}
-          <div className="absolute left-1/2 transform -translate-x-1/2 -bottom-16">
-            <div className="w-32 h-32 rounded-full border-4 border-gray-950 overflow-hidden bg-gray-800">
-              {profile.profileImage ? (
-                <img
-                  src={profile.profileImage || "/placeholder.svg"}
-                  alt={profile.name || profile.username}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <User className="h-16 w-16 text-gray-400" />
-                </div>
-              )}
-            </div>
-          </div>
         </div>
+      </div>
 
-        {/* Profile Info */}
-        <div className="pt-20 pb-8 px-6">
-          <div className="max-w-6xl mx-auto text-center">
-            <h1 className="text-3xl md:text-4xl font-bold mb-2">{profile.name || profile.username}</h1>
-            <p className="text-gray-400 text-lg mb-4">@{profile.username}</p>
+      {/* Profile Content */}
+      <div className="px-4 md:px-8 pt-20 pb-8">
+        <div className="max-w-6xl mx-auto">
+          {/* Profile Header */}
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
+            <div className="space-y-2">
+              <h1 className="text-3xl md:text-4xl font-bold">{profile.name || profile.username}</h1>
+              <p className="text-gray-400">@{profile.username}</p>
+              {profile.bio && <p className="text-gray-300 max-w-2xl">{profile.bio}</p>}
+            </div>
 
-            {profile.bio && <p className="text-gray-300 max-w-2xl mx-auto mb-6 leading-relaxed">{profile.bio}</p>}
-
-            {/* Share Button */}
-            <div className="flex justify-center gap-4 mb-8">
+            <div className="flex gap-3">
               <Button
-                onClick={copyProfileLink}
+                onClick={shareProfile}
                 variant="outline"
-                className="border-gray-600 bg-transparent text-gray-300 hover:bg-gray-800 hover:text-white"
+                className="border-gray-600 bg-transparent text-gray-300 hover:bg-gray-700"
               >
                 <Share2 className="h-4 w-4 mr-2" />
-                Share Profile
+                Share
+              </Button>
+              <Button
+                onClick={handleSupport}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+                disabled={!profile.hasRazorpaySetup && !profile.hasPersonalPayment}
+              >
+                <Heart className="h-4 w-4 mr-2" />
+                Support Creator
               </Button>
             </div>
           </div>
-        </div>
 
-        {/* Main Content Grid */}
-        <div className="px-6 pb-12">
-          <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Left Side - Supporters List */}
-            <div className="lg:col-span-1">
+          {/* Payment Setup Status */}
+          {!profile.hasRazorpaySetup && !profile.hasPersonalPayment && (
+            <Card className="bg-yellow-900/20 border-yellow-700 mb-8">
+              <CardContent className="p-4">
+                <p className="text-yellow-200 text-sm">
+                  This creator hasn't set up payment methods yet. They need to configure either Razorpay or personal
+                  payment details to receive support.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Main Content Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Left Side - About and Support Status */}
+            <div className="lg:col-span-1 space-y-6">
+              {/* About Card */}
+              <Card className="bg-gray-800 border-gray-600">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg text-white">About</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {profile.bio ? (
+                    <p className="text-gray-300 text-sm leading-relaxed">{profile.bio}</p>
+                  ) : (
+                    <p className="text-gray-500 text-sm italic">No bio available</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Support Status Card */}
+              <Card className="bg-gray-800 border-gray-600">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg text-white">Payment Methods</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    {profile.hasRazorpaySetup ? (
+                      <CheckCircle className="h-4 w-4 text-green-400" />
+                    ) : (
+                      <div className="h-4 w-4 rounded-full border border-gray-600"></div>
+                    )}
+                    <span className="text-sm text-gray-300">Razorpay Payments</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {profile.hasPersonalPayment ? (
+                      <CheckCircle className="h-4 w-4 text-green-400" />
+                    ) : (
+                      <div className="h-4 w-4 rounded-full border border-gray-600"></div>
+                    )}
+                    <span className="text-sm text-gray-300">Direct Payments</span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Joined Date */}
+              {profile.createdAt && (
+                <Card className="bg-gray-800 border-gray-600">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-2 text-gray-300">
+                      <Calendar className="h-4 w-4" />
+                      <span className="text-sm">Joined {new Date(profile.createdAt).toLocaleDateString()}</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+
+            {/* Right Side - Supporters List */}
+            <div className="lg:col-span-2">
               <Card className="bg-gray-800 border-gray-600">
                 <CardHeader>
-                  <CardTitle className="text-white flex items-center gap-2">
+                  <CardTitle className="text-white flex items-center gap-2 text-xl">
                     <Heart className="h-5 w-5 text-red-400" />
                     Recent Supporters
                   </CardTitle>
-                  <CardDescription className="text-gray-300">
-                    {supporters.length} people have supported {profile.name || profile.username}
-                  </CardDescription>
+                  <p className="text-gray-300 text-sm">
+                    {supporters.length} {supporters.length === 1 ? "person has" : "people have"} supported{" "}
+                    {profile.name || profile.username}
+                  </p>
                 </CardHeader>
                 <CardContent>
-                  {supporters.length > 0 ? (
+                  {supportersLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                      <span className="ml-2 text-gray-400">Loading supporters...</span>
+                    </div>
+                  ) : supporters.length > 0 ? (
                     <div className="space-y-4 max-h-96 overflow-y-auto">
                       {supporters.map((supporter, index) => (
-                        <div key={index} className="border-b border-gray-700 pb-3 last:border-b-0">
+                        <div key={index} className="border-b border-gray-700 pb-4 last:border-b-0">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="font-semibold text-white">{supporter.name}</span>
-                            <span className="text-green-400 font-bold">₹{supporter.amount}</span>
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center">
+                                <User className="h-4 w-4 text-gray-400" />
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-white">{supporter.name}</span>
+                                {supporter.verified ? (
+                                  <Shield className="h-3 w-3 text-green-400" title="Verified payment" />
+                                ) : (
+                                  <AlertCircle className="h-3 w-3 text-yellow-400" title="Pending verification" />
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1 text-green-400 font-bold">
+                              <IndianRupee className="h-4 w-4" />
+                              <span>{supporter.amount}</span>
+                            </div>
                           </div>
-                          {supporter.message && <p className="text-sm text-gray-400 italic">"{supporter.message}"</p>}
-                          <p className="text-xs text-gray-500 mt-1">
-                            {new Date(supporter.createdAt).toLocaleDateString()}
-                          </p>
+                          {supporter.message && (
+                            <div className="ml-10 mb-2">
+                              <p className="text-sm text-gray-300 italic bg-gray-700/50 rounded-lg p-2">
+                                "{supporter.message}"
+                              </p>
+                            </div>
+                          )}
+                          <div className="ml-10 flex items-center gap-2">
+                            <p className="text-xs text-gray-500">
+                              {new Date(supporter.createdAt).toLocaleDateString("en-IN", {
+                                year: "numeric",
+                                month: "short",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </p>
+                            <span className="text-xs text-gray-600">•</span>
+                            <span className="text-xs text-gray-500 capitalize">{supporter.paymentMethod}</span>
+                          </div>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <div className="text-center py-8">
+                    <div className="text-center py-12">
                       <Users className="h-12 w-12 text-gray-600 mx-auto mb-4" />
-                      <p className="text-gray-400">No supporters yet</p>
+                      <p className="text-gray-400 mb-2">No supporters yet</p>
                       <p className="text-sm text-gray-500">Be the first to support this creator!</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Right Side - Support Payment Form */}
-            <div className="lg:col-span-2">
-              <Card className="bg-gray-800 border-gray-600">
-                <CardHeader>
-                  <CardTitle className="text-white flex items-center gap-2">
-                    <IndianRupee className="h-5 w-5 text-green-400" />
-                    Support {profile.name || profile.username}
-                  </CardTitle>
-                  <CardDescription className="text-gray-300">
-                    Show your appreciation with a financial contribution
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {!profile.razorpayId ? (
-                    <div className="text-center py-8">
-                      <div className="bg-yellow-900/20 border border-yellow-700 rounded-lg p-4">
-                        <p className="text-yellow-400">
-                          This creator hasn't set up payments yet. They need to configure their Razorpay account to
-                          receive support.
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      {/* Amount Selection */}
-                      <div className="space-y-3">
-                        <Label className="text-gray-300">Choose Amount</Label>
-                        <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
-                          {defaultAmounts.map((amount) => (
-                            <Button
-                              key={amount}
-                              onClick={() => handleAmountSelect(amount)}
-                              variant={supportAmount === amount.toString() ? "default" : "outline"}
-                              className={
-                                supportAmount === amount.toString()
-                                  ? "bg-blue-600 hover:bg-blue-700 text-white"
-                                  : "border-gray-600 bg-transparent text-gray-300 hover:bg-gray-700"
-                              }
-                            >
-                              ₹{amount}
-                            </Button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Custom Amount */}
-                      <div className="space-y-2">
-                        <Label className="text-gray-300">Or enter custom amount</Label>
-                        <div className="relative">
-                          <IndianRupee className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                          <Input
-                            type="number"
-                            placeholder="Enter amount"
-                            value={customAmount}
-                            onChange={(e) => handleCustomAmountChange(e.target.value)}
-                            className="pl-10 bg-gray-700 border-gray-600 text-white"
-                            min="1"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Supporter Name */}
-                      <div className="space-y-2">
-                        <Label className="text-gray-300">Your Name *</Label>
-                        <Input
-                          placeholder="How should we display your name?"
-                          value={supporterName}
-                          onChange={(e) => setSupporterName(e.target.value)}
-                          className="bg-gray-700 border-gray-600 text-white"
-                        />
-                      </div>
-
-                      {/* Support Message */}
-                      <div className="space-y-2">
-                        <Label className="text-gray-300">Message (Optional)</Label>
-                        <Textarea
-                          placeholder="Leave a message for the creator..."
-                          value={supportMessage}
-                          onChange={(e) => setSupportMessage(e.target.value)}
-                          className="bg-gray-700 border-gray-600 text-white min-h-[80px]"
-                          maxLength={200}
-                        />
-                        <p className="text-xs text-gray-500">{supportMessage.length}/200 characters</p>
-                      </div>
-
-                      {/* Support Button */}
                       <Button
                         onClick={handleSupport}
-                        disabled={processingPayment || !supportAmount || !supporterName.trim()}
-                        className="w-full bg-green-600 hover:bg-green-700 text-white py-3 text-lg font-semibold"
+                        className="mt-4 bg-blue-600 hover:bg-blue-700"
+                        disabled={!profile.hasRazorpaySetup && !profile.hasPersonalPayment}
                       >
-                        {processingPayment ? (
-                          <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                            Processing...
-                          </>
-                        ) : (
-                          <>
-                            <Heart className="h-5 w-5 mr-2" />
-                            Support with ₹ {supportAmount || "0"}
-                          </>
-                        )}
+                        <Heart className="h-4 w-4 mr-2" />
+                        Support Now
                       </Button>
-
-                      <div className="text-center">
-                        <p className="text-xs text-gray-500">
-                          Secure payment powered by Razorpay • No account required
-                        </p>
-                      </div>
-                    </>
+                    </div>
                   )}
                 </CardContent>
               </Card>
@@ -460,6 +554,202 @@ export default function UserProfile({ params }) {
           </div>
         </div>
       </div>
-    </>
+
+      {/* Support Modal */}
+      <Dialog open={paymentModalOpen} onOpenChange={setPaymentModalOpen}>
+        <DialogContent className="bg-gray-800 border-gray-600 text-white max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Heart className="h-5 w-5 text-red-400" />
+              Support {profile.name || profile.username}
+            </DialogTitle>
+            <DialogDescription className="text-gray-300">
+              Choose your payment method and amount to support this creator
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6">
+            {/* Payment Method Selection */}
+            {profile.hasRazorpaySetup && profile.hasPersonalPayment && (
+              <div className="space-y-3">
+                <Label className="text-gray-300">Payment Method</Label>
+                <Tabs value={selectedPaymentMethod} onValueChange={setSelectedPaymentMethod}>
+                  <TabsList className="grid w-full grid-cols-2 bg-gray-700">
+                    <TabsTrigger value="razorpay" className="data-[state=active]:bg-gray-600">
+                      <CreditCard className="h-4 w-4 mr-2" />
+                      Razorpay
+                    </TabsTrigger>
+                    <TabsTrigger value="personal" className="data-[state=active]:bg-gray-600">
+                      <QrCode className="h-4 w-4 mr-2" />
+                      Direct Payment
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
+            )}
+
+            {/* Amount Selection */}
+            <div className="space-y-3">
+              <Label className="text-gray-300">Choose Amount</Label>
+              <div className="grid grid-cols-3 gap-2">
+                {defaultAmounts.map((amount) => (
+                  <Button
+                    key={amount}
+                    onClick={() => handleAmountSelect(amount)}
+                    variant={paymentAmount === amount.toString() ? "default" : "outline"}
+                    className={
+                      paymentAmount === amount.toString()
+                        ? "bg-blue-600 hover:bg-blue-700 text-white"
+                        : "border-gray-600 bg-transparent text-gray-300 hover:bg-gray-700"
+                    }
+                  >
+                    ₹{amount}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {/* Custom Amount */}
+            <div className="space-y-2">
+              <Label className="text-gray-300">Or enter custom amount</Label>
+              <div className="relative">
+                <IndianRupee className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  type="number"
+                  placeholder="Enter amount"
+                  value={customAmount}
+                  onChange={(e) => handleCustomAmountChange(e.target.value)}
+                  className="pl-10 bg-gray-700 border-gray-600 text-white"
+                  min="1"
+                />
+              </div>
+            </div>
+
+            {/* Supporter Name */}
+            <div className="space-y-2">
+              <Label className="text-gray-300">Your Name *</Label>
+              <Input
+                placeholder="How should we display your name?"
+                value={supporterName}
+                onChange={(e) => setSupporterName(e.target.value)}
+                className="bg-gray-700 border-gray-600 text-white"
+              />
+            </div>
+
+            {/* Support Message */}
+            <div className="space-y-2">
+              <Label className="text-gray-300">Message (Optional)</Label>
+              <Textarea
+                placeholder="Leave a message for the creator..."
+                value={paymentMessage}
+                onChange={(e) => setPaymentMessage(e.target.value)}
+                className="bg-gray-700 border-gray-600 text-white min-h-[80px]"
+                maxLength={200}
+              />
+              <p className="text-xs text-gray-500">{paymentMessage.length}/200 characters</p>
+            </div>
+
+            {/* Payment Content */}
+            {selectedPaymentMethod === "razorpay" && profile.hasRazorpaySetup && (
+              <div className="space-y-4">
+                <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
+                  <p className="text-blue-300 text-sm">
+                    <strong>Secure Payment:</strong> Your payment will be processed securely through Razorpay. You can
+                    pay using cards, UPI, net banking, or wallets.
+                  </p>
+                </div>
+
+                <Button
+                  onClick={processRazorpayPayment}
+                  disabled={paymentLoading || !paymentAmount || !supporterName.trim()}
+                  className="w-full bg-blue-600 hover:bg-blue-700"
+                >
+                  {paymentLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <CreditCard className="h-4 w-4 mr-2" />
+                      Pay ₹{paymentAmount || "0"}
+                    </>
+                  )}
+                </Button>
+
+                <p className="text-xs text-gray-400 text-center">Secure payment powered by Razorpay</p>
+              </div>
+            )}
+
+            {selectedPaymentMethod === "personal" && profile.hasPersonalPayment && (
+              <div className="space-y-4">
+                <div className="bg-yellow-900/20 border border-yellow-700 rounded-lg p-4">
+                  <p className="text-yellow-200 text-sm">
+                    <strong>Direct Payment:</strong> Use the details below to pay directly. Your support will be
+                    recorded but marked as "pending verification" until confirmed.
+                  </p>
+                </div>
+
+                {profile.upiId && (
+                  <div className="space-y-2">
+                    <Label className="text-gray-300">UPI ID</Label>
+                    <div className="flex items-center gap-2">
+                      <Input value={profile.upiId} readOnly className="bg-gray-700 border-gray-600 text-white" />
+                      <Button
+                        onClick={copyUpiId}
+                        variant="outline"
+                        size="sm"
+                        className="border-gray-600 bg-transparent hover:bg-gray-700"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {profile.qrCodeImage && (
+                  <div className="space-y-2">
+                    <Label className="text-gray-300">Payment QR Code</Label>
+                    <div className="flex justify-center">
+                      <div className="w-48 h-48 bg-white rounded-lg p-4">
+                        <img
+                          src={profile.qrCodeImage || "/placeholder.svg"}
+                          alt="Payment QR Code"
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-400 text-center">Scan with any UPI app to pay</p>
+                  </div>
+                )}
+
+                <Button
+                  onClick={handlePersonalPayment}
+                  disabled={paymentLoading || !paymentAmount || !supporterName.trim()}
+                  className="w-full bg-green-600 hover:bg-green-700"
+                >
+                  {paymentLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      Recording...
+                    </>
+                  ) : (
+                    <>
+                      <QrCode className="h-4 w-4 mr-2" />
+                      Record ₹{paymentAmount || "0"} Support
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Razorpay Script */}
+      <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    </div>
   )
 }
+
+export default UserProfile

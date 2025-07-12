@@ -88,6 +88,8 @@ export async function GET(request) {
       bannerImage: profile.bannerImage || "",
       razorpayId: profile.razorpayId || "",
       razorpaySecret: profile.razorpaySecret ? decrypt(profile.razorpaySecret) : "",
+      qrCodeImage: profile.qrCodeImage || "",
+      upiId: profile.upiId || "",
     }
 
     console.log("Returning profile data:", { ...profileData, razorpaySecret: profileData.razorpaySecret ? "***" : "" })
@@ -106,7 +108,19 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const data = await request.json()
-    const { userId, username, name, email, bio, profileImage, bannerImage, razorpayId, razorpaySecret } = data
+    const {
+      userId,
+      username,
+      name,
+      email,
+      bio,
+      profileImage,
+      bannerImage,
+      razorpayId,
+      razorpaySecret,
+      qrCodeImage,
+      upiId,
+    } = data
 
     console.log("=== PROFILE SAVE DEBUG (fuelmywork.users) ===")
     console.log("Saving profile for userId:", userId)
@@ -158,6 +172,8 @@ export async function POST(request) {
       bannerImage: bannerImage || "",
       razorpayId: razorpayId?.trim() || "",
       razorpaySecret: razorpaySecret?.trim() ? encrypt(razorpaySecret.trim()) : "",
+      qrCodeImage: qrCodeImage || "",
+      upiId: upiId?.trim() || "",
       updatedAt: new Date(),
     }
 

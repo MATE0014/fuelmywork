@@ -28,76 +28,58 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url)
     const username = searchParams.get("username")
 
-    console.log("=== PROFILE BY USERNAME DEBUG (fuelmywork.users) ===")
-    console.log("1. Raw username from URL:", username)
+    console.log("=== PROFILE BY USERNAME DEBUG ===")
+    console.log("Looking for username:", username)
 
     if (!username) {
-      console.log("ERROR: No username provided")
       return NextResponse.json({ error: "Username is required" }, { status: 400 })
     }
 
-    const cleanUsername = username.toLowerCase().trim()
-    console.log("2. Cleaned username for search:", cleanUsername)
-
     const client = await clientPromise
-    // Explicitly connect to the 'fuelmywork' database for creator profiles
     const db = client.db("fuelmywork")
-    const creatorProfilesCollection = db.collection("users") // Using 'users' collection as per your clarification
+    const creatorProfilesCollection = db.collection("users")
 
-    console.log("3. Connected to database: fuelmywork")
-    console.log("4. Searching in collection: users")
+    console.log("Connected to database: fuelmywork")
+    console.log("Collection: users")
 
     const profile = await creatorProfilesCollection.findOne({
-      username: cleanUsername,
+      username: username.toLowerCase().trim(),
     })
 
-    console.log("5. Search result:", profile ? "FOUND" : "NOT FOUND")
-
-    if (profile) {
-      console.log("6. Found profile details:", {
-        id: profile._id,
-        username: profile.username,
-        name: profile.name,
-        userId: profile.userId,
-        hasRazorpayId: !!profile.razorpayId,
-      })
-    } else {
-      console.log("6. Profile not found. Checking similar usernames...")
-      const similarProfiles = await creatorProfilesCollection
-        .find({
-          username: { $regex: username, $options: "i" },
-        })
-        .toArray()
-      console.log(
-        "7. Similar usernames found:",
-        similarProfiles.map((p) => p.username),
-      )
-    }
+    console.log("Found profile:", profile ? "Yes" : "No")
 
     if (!profile) {
-      console.log("FINAL: Returning 404 - User not found")
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
+      console.log("No profile found for username:", username)
+      return NextResponse.json({ error: "Creator not found" }, { status: 404 })
     }
 
-    const publicProfile = {
-      username: profile.username,
+    const profileData = {
+      username: profile.username || "",
       name: profile.name || "",
+      email: profile.email || "",
       bio: profile.bio || "",
       profileImage: profile.profileImage || "",
       bannerImage: profile.bannerImage || "",
       razorpayId: profile.razorpayId || "",
+      qrCodeImage: profile.qrCodeImage || "",
+      upiId: profile.upiId || "",
+      // Don't return the secret key for security
+      hasRazorpaySetup: !!(profile.razorpayId && profile.razorpaySecret),
+      hasPersonalPayment: !!(profile.qrCodeImage || profile.upiId),
       createdAt: profile.createdAt,
       updatedAt: profile.updatedAt,
     }
 
-    console.log("FINAL: Returning profile data successfully")
+    console.log("Returning profile data for:", username)
+    console.log("Has Razorpay setup:", profileData.hasRazorpaySetup)
+    console.log("Has personal payment:", profileData.hasPersonalPayment)
     console.log("=== END PROFILE BY USERNAME DEBUG ===")
 
-    return NextResponse.json(publicProfile)
+    return NextResponse.json(profileData)
   } catch (error) {
-    console.error("=== PROFILE BY USERNAME ERROR (fuelmywork.users) ===")
-    console.error("Error fetching profile by username:", error)
-    console.error("Stack trace:", error.stack)
-    return NextResponse.json({ error: "Failed to fetch profile" }, { status: 500 })
+    console.error("=== PROFILE BY USERNAME ERROR ===")
+    console.error("Error fetching profile:", error)
+    console.error("Stack:", error.stack)
+    return NextResponse.json({ error: "Failed to fetch profile: " + error.message }, { status: 500 })
   }
 }
