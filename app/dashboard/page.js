@@ -64,6 +64,15 @@ const Dashboard = () => {
   const [originalData, setOriginalData] = useState({})
   const [hasChanges, setHasChanges] = useState(false)
 
+  const [supporterStats, setSupporterStats] = useState({
+    totalSupporters: 0,
+    totalEarned: 0,
+    thisMonth: 0,
+    pendingVerification: 0,
+  })
+  const [pendingPayments, setPendingPayments] = useState([])
+  const [verifyingPayment, setVerifyingPayment] = useState(null)
+
   useEffect(() => {
     // Redirect if not logged in
     if (!authLoading && !user) {
@@ -121,6 +130,13 @@ const Dashboard = () => {
         setProfileLoaded(true) // Mark profile as loaded
         setHasChanges(false) // Reset changes state
 
+        // Load stats and pending payments AFTER profile data is set
+        if (cleanData.username) {
+          console.log("Loading stats for username:", cleanData.username)
+          await loadSupporterStats(cleanData.username)
+          await loadPendingPayments(cleanData.username)
+        }
+
         toast.success("Profile loaded successfully")
       } else {
         const errorData = await response.json()
@@ -133,6 +149,79 @@ const Dashboard = () => {
     } finally {
       setDataLoading(false)
       loadAttemptedRef.current = false // Allow future loads if needed
+    }
+  }
+
+  const loadSupporterStats = async (username) => {
+    if (!username) {
+      console.log("No username provided for stats loading")
+      return
+    }
+
+    try {
+      console.log("Fetching supporter stats for:", username)
+      const response = await fetch(`/api/creator/stats?username=${username}`)
+      if (response.ok) {
+        const data = await response.json()
+        console.log("Supporter stats loaded:", data)
+        setSupporterStats(data)
+      } else {
+        console.error("Failed to load supporter stats:", response.status)
+      }
+    } catch (error) {
+      console.error("Error loading supporter stats:", error)
+    }
+  }
+
+  const loadPendingPayments = async (username) => {
+    if (!username) {
+      console.log("No username provided for pending payments loading")
+      return
+    }
+
+    try {
+      console.log("Fetching pending payments for:", username)
+      const response = await fetch(`/api/creator/pending-payments?username=${username}`)
+      if (response.ok) {
+        const data = await response.json()
+        console.log("Pending payments loaded:", data.payments?.length || 0)
+        setPendingPayments(data.payments || [])
+      } else {
+        console.error("Failed to load pending payments:", response.status)
+      }
+    } catch (error) {
+      console.error("Error loading pending payments:", error)
+    }
+  }
+
+  const verifyPayment = async (paymentId, isVerified) => {
+    setVerifyingPayment(paymentId)
+    try {
+      const response = await fetch("/api/creator/verify-payment", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          paymentId,
+          isVerified,
+          creatorUsername: profileData.username,
+        }),
+      })
+
+      if (response.ok) {
+        toast.success(isVerified ? "Payment verified successfully!" : "Payment marked as invalid")
+        // Refresh data with current username
+        await loadPendingPayments(profileData.username)
+        await loadSupporterStats(profileData.username)
+      } else {
+        toast.error("Failed to update payment status")
+      }
+    } catch (error) {
+      console.error("Error verifying payment:", error)
+      toast.error("Failed to update payment status")
+    } finally {
+      setVerifyingPayment(null)
     }
   }
 
@@ -375,6 +464,17 @@ const Dashboard = () => {
               >
                 Payment Setup
               </TabsTrigger>
+              <TabsTrigger
+                value="verification"
+                className="text-gray-500 data-[state=active]:bg-gray-700 data-[state=active]:text-white flex-shrink-0"
+              >
+                Payment Verification
+                {supporterStats.pendingVerification > 0 && (
+                  <span className="ml-2 bg-yellow-500 text-black text-xs px-2 py-0.5 rounded-full">
+                    {supporterStats.pendingVerification}
+                  </span>
+                )}
+              </TabsTrigger>
             </TabsList>
 
             {/* Overview Tab */}
@@ -403,6 +503,8 @@ const Dashboard = () => {
                   </div>
                 </CardContent>
               </Card>
+
+              
 
               {/* Current Profile Display */}
               <Card className="bg-gray-800 border-gray-600">
@@ -511,8 +613,10 @@ const Dashboard = () => {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold text-white">0</div>
-                    <p className="text-xs text-gray-400">Complete profile to start</p>
+                    <div className="text-2xl font-bold text-white">{supporterStats.totalSupporters}</div>
+                    <p className="text-xs text-gray-400">
+                      {supporterStats.totalSupporters === 0 ? "Complete profile to start" : "People supporting you"}
+                    </p>
                   </CardContent>
                 </Card>
 
@@ -524,8 +628,10 @@ const Dashboard = () => {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold text-white">₹0</div>
-                    <p className="text-xs text-gray-400">Set up payments to start</p>
+                    <div className="text-2xl font-bold text-white">₹{supporterStats.totalEarned}</div>
+                    <p className="text-xs text-gray-400">
+                      {supporterStats.totalEarned === 0 ? "Set up payments to start" : "Total earnings"}
+                    </p>
                   </CardContent>
                 </Card>
 
@@ -537,21 +643,25 @@ const Dashboard = () => {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold text-white">₹0</div>
-                    <p className="text-xs text-gray-400">No earnings yet</p>
+                    <div className="text-2xl font-bold text-white">₹{supporterStats.thisMonth}</div>
+                    <p className="text-xs text-gray-400">
+                      {supporterStats.thisMonth === 0 ? "No earnings this month" : "Current month earnings"}
+                    </p>
                   </CardContent>
                 </Card>
 
                 <Card className="bg-gray-800 border-gray-600">
                   <CardHeader className="pb-2">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-sm font-medium text-gray-300">Profile Views</CardTitle>
-                      <Heart className="h-4 w-4 text-red-400" />
+                      <CardTitle className="text-sm font-medium text-gray-300">Pending Verification</CardTitle>
+                      <Heart className="h-4 w-4 text-yellow-400" />
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold text-white">0</div>
-                    <p className="text-xs text-gray-400">Share your profile link</p>
+                    <div className="text-2xl font-bold text-white">{supporterStats.pendingVerification}</div>
+                    <p className="text-xs text-gray-400">
+                      {supporterStats.pendingVerification === 0 ? "No pending payments" : "Awaiting verification"}
+                    </p>
                   </CardContent>
                 </Card>
               </div>
@@ -574,7 +684,7 @@ const Dashboard = () => {
                         onClick={copyProfileLink}
                         disabled={!profileData.username}
                         variant="outline"
-                        className="border-gray-600 text-gray-300 bg-transparent hover:bg-gray-700 hover:text-white w-full sm:w-auto"
+                        className="border-gray-600 text-gray-300 bg-transparent hover:bg-gray-700 hover:text-gray-200 w-full sm:w-auto"
                       >
                         <Copy className="h-4 w-4" />
                       </Button>
@@ -924,6 +1034,101 @@ const Dashboard = () => {
                         {profileData.upiId && <p>UPI ID: {profileData.upiId}</p>}
                         {profileData.qrCodeImage && <p>QR Code: Uploaded</p>}
                       </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Payment Verification Tab */}
+            <TabsContent value="verification" className="space-y-4 md:space-y-6">
+              <Card className="bg-gray-800 border-gray-600">
+                <CardHeader>
+                  <CardTitle className="text-white flex items-center gap-2">
+                    <AlertCircle className="h-5 w-5 text-yellow-400" />
+                    Pending Payment Verification
+                  </CardTitle>
+                  <CardDescription className="text-gray-300">
+                    Review and verify direct payments received from supporters
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {pendingPayments.length > 0 ? (
+                    <div className="space-y-4">
+                      {pendingPayments.map((payment) => (
+                        <div key={payment._id} className="border border-gray-700 rounded-lg p-4 space-y-3">
+                          <div className="flex items-start justify-between">
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <User className="h-4 w-4 text-gray-400" />
+                                <span className="font-semibold text-white">{payment.name}</span>
+                                <span className="text-green-400 font-bold">₹{payment.amount}</span>
+                              </div>
+
+                              {payment.paymentId && (
+                                <div className="flex items-center gap-2 text-sm">
+                                  <span className="text-gray-400">Payment ID:</span>
+                                  <span className="text-gray-300 font-mono bg-gray-700 px-2 py-1 rounded">
+                                    {payment.paymentId}
+                                  </span>
+                                </div>
+                              )}
+
+                              {payment.message && (
+                                <div className="text-sm">
+                                  <span className="text-gray-400">Message:</span>
+                                  <p className="text-gray-300 italic mt-1">"{payment.message}"</p>
+                                </div>
+                              )}
+
+                              <div className="text-xs text-gray-500">
+                                Submitted on{" "}
+                                {new Date(payment.createdAt).toLocaleDateString("en-IN", {
+                                  year: "numeric",
+                                  month: "long",
+                                  day: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </div>
+                            </div>
+
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={() => verifyPayment(payment._id, false)}
+                                disabled={verifyingPayment === payment._id}
+                                variant="outline"
+                                size="sm"
+                                className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white"
+                              >
+                                {verifyingPayment === payment._id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  "Reject"
+                                )}
+                              </Button>
+                              <Button
+                                onClick={() => verifyPayment(payment._id, true)}
+                                disabled={verifyingPayment === payment._id}
+                                size="sm"
+                                className="bg-green-600 hover:bg-green-700"
+                              >
+                                {verifyingPayment === payment._id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  "Verify"
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <CheckCircle className="h-12 w-12 text-green-400 mx-auto mb-4" />
+                      <p className="text-gray-400 mb-2">No pending payments to verify</p>
+                      <p className="text-sm text-gray-500">All direct payments have been processed</p>
                     </div>
                   )}
                 </CardContent>

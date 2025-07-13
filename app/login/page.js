@@ -1,17 +1,23 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Github, ArrowLeft, Loader2 } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Github, ArrowLeft, Loader2, Mail, Lock } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
+import { signIn } from "next-auth/react"
 
 const Login = () => {
-  const { user, login, loading } = useAuth()
+  const { user, loading } = useAuth()
   const router = useRouter()
   const [signingIn, setSigningIn] = useState(false)
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
 
   useEffect(() => {
     // Redirect if already logged in
@@ -24,10 +30,42 @@ const Login = () => {
     try {
       setSigningIn(true)
       toast.loading("Redirecting to GitHub...")
-      await login("github")
+      await signIn("github", { callbackUrl: "/dashboard" })
     } catch (error) {
       console.error("Login error:", error)
       toast.error("Failed to sign in with GitHub")
+      setSigningIn(false)
+    }
+  }
+
+  const handleEmailLogin = async (e) => {
+    e.preventDefault()
+
+    if (!email || !password) {
+      toast.error("Please fill in all fields")
+      return
+    }
+
+    try {
+      setSigningIn(true)
+      toast.loading("Signing in...")
+
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      })
+
+      if (result?.error) {
+        toast.error("Invalid email or password")
+      } else if (result?.ok) {
+        toast.success("Signed in successfully!")
+        router.push("/dashboard")
+      }
+    } catch (error) {
+      console.error("Login error:", error)
+      toast.error("Failed to sign in")
+    } finally {
       setSigningIn(false)
     }
   }
@@ -80,20 +118,87 @@ const Login = () => {
             </div>
             <CardTitle className="text-2xl font-bold text-white">Welcome to fuelmywork</CardTitle>
             <CardDescription className="text-gray-300">
-              Sign in with GitHub to start supporting creators or showcase your work
+              Sign in to start supporting creators or showcase your work
             </CardDescription>
           </CardHeader>
 
           <CardContent className="space-y-4">
-            {/* GitHub Login */}
-            <Button
-              onClick={handleGitHubLogin}
-              disabled={signingIn}
-              className="w-full bg-gray-700 hover:bg-gray-600 text-white border border-gray-600 flex items-center justify-center gap-3 py-3"
-            >
-              {signingIn ? <Loader2 className="h-5 w-5 animate-spin" /> : <Github className="h-5 w-5" />}
-              {signingIn ? "Signing in..." : "Continue with GitHub"}
-            </Button>
+            <Tabs defaultValue="email" className="w-full">
+              <TabsList className="grid w-full grid-cols-2 bg-gray-700">
+                <TabsTrigger value="email" className="data-[state=active]:bg-gray-600">
+                  <Mail className="h-4 w-4 mr-2" />
+                  Email
+                </TabsTrigger>
+                <TabsTrigger value="github" className="data-[state=active]:bg-gray-600">
+                  <Github className="h-4 w-4 mr-2" />
+                  GitHub
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="email" className="space-y-4 mt-4">
+                <form onSubmit={handleEmailLogin} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="email" className="text-gray-300">
+                      Email
+                    </Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="test@fuelmywork.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="bg-gray-700 border-gray-600 text-white"
+                      disabled={signingIn}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="password" className="text-gray-300">
+                      Password
+                    </Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      placeholder="testpassword123"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="bg-gray-700 border-gray-600 text-white"
+                      disabled={signingIn}
+                    />
+                  </div>
+
+                  <Button
+                    type="submit"
+                    disabled={signingIn}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center gap-3 py-3"
+                  >
+                    {signingIn ? <Loader2 className="h-5 w-5 animate-spin" /> : <Lock className="h-5 w-5" />}
+                    {signingIn ? "Signing in..." : "Sign in with Email"}
+                  </Button>
+                </form>
+
+                <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-3">
+                  <p className="text-blue-300 text-sm">
+                    <strong>Test Account:</strong>
+                    <br />
+                    Email: test@fuelmywork.com
+                    <br />
+                    Password: testpassword123
+                  </p>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="github" className="space-y-4 mt-4">
+                <Button
+                  onClick={handleGitHubLogin}
+                  disabled={signingIn}
+                  className="w-full bg-gray-700 hover:bg-gray-600 text-white border border-gray-600 flex items-center justify-center gap-3 py-3"
+                >
+                  {signingIn ? <Loader2 className="h-5 w-5 animate-spin" /> : <Github className="h-5 w-5" />}
+                  {signingIn ? "Signing in..." : "Continue with GitHub"}
+                </Button>
+              </TabsContent>
+            </Tabs>
 
             <div className="pt-4 text-center">
               <p className="text-sm text-gray-400">

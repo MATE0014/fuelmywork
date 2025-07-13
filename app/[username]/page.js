@@ -44,6 +44,7 @@ const UserProfile = () => {
   const [paymentMessage, setPaymentMessage] = useState("")
   const [paymentLoading, setPaymentLoading] = useState(false)
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("razorpay")
+  const [paymentId, setPaymentId] = useState("")
 
   const username = params?.username
   const defaultAmounts = [50, 100, 250, 500, 1000]
@@ -193,6 +194,7 @@ const UserProfile = () => {
               setCustomAmount("")
               setSupporterName("")
               setPaymentMessage("")
+              setPaymentId("")
               // Refresh supporters list
               fetchSupporters()
             } else {
@@ -238,6 +240,11 @@ const UserProfile = () => {
       return
     }
 
+    if (!paymentId.trim()) {
+      toast.error("Please enter the transaction ID")
+      return
+    }
+
     setPaymentLoading(true)
 
     try {
@@ -253,6 +260,7 @@ const UserProfile = () => {
           amount: Number.parseFloat(paymentAmount),
           message: paymentMessage.trim(),
           paymentMethod: "direct",
+          paymentId: paymentId.trim(),
         }),
       })
 
@@ -269,6 +277,7 @@ const UserProfile = () => {
         setCustomAmount("")
         setSupporterName("")
         setPaymentMessage("")
+        setPaymentId("")
         setPaymentModalOpen(false)
 
         // Refresh supporters list
@@ -575,11 +584,11 @@ const UserProfile = () => {
                 <Label className="text-gray-300">Payment Method</Label>
                 <Tabs value={selectedPaymentMethod} onValueChange={setSelectedPaymentMethod}>
                   <TabsList className="grid w-full grid-cols-2 bg-gray-700">
-                    <TabsTrigger value="razorpay" className="data-[state=active]:bg-gray-600">
+                    <TabsTrigger value="razorpay" className="data-[state=active]:bg-gray-600 data-[state=active]:text-white text-gray-300">
                       <CreditCard className="h-4 w-4 mr-2" />
                       Razorpay
                     </TabsTrigger>
-                    <TabsTrigger value="personal" className="data-[state=active]:bg-gray-600">
+                    <TabsTrigger value="personal" className="data-[state=active]:bg-gray-600 data-[state=active]:text-white text-gray-300">
                       <QrCode className="h-4 w-4 mr-2" />
                       Direct Payment
                     </TabsTrigger>
@@ -635,6 +644,24 @@ const UserProfile = () => {
                 className="bg-gray-700 border-gray-600 text-white"
               />
             </div>
+
+            {/* Payment ID - Required for direct payments */}
+            {selectedPaymentMethod === "personal" && (
+              <div className="space-y-2">
+                <Label className="text-gray-300">Transaction ID *</Label>
+                <Input
+                  placeholder="Enter your UPI/payment transaction ID"
+                  value={paymentId}
+                  onChange={(e) => setPaymentId(e.target.value)}
+                  className="bg-gray-700 border-gray-600 text-white"
+                  required
+                />
+                <p className="text-xs text-gray-400">
+                  This is required to help the creator verify your payment. Find this in your payment app after
+                  completing the transaction.
+                </p>
+              </div>
+            )}
 
             {/* Support Message */}
             <div className="space-y-2">
@@ -725,7 +752,7 @@ const UserProfile = () => {
 
                 <Button
                   onClick={handlePersonalPayment}
-                  disabled={paymentLoading || !paymentAmount || !supporterName.trim()}
+                  disabled={paymentLoading || !paymentAmount || !supporterName.trim() || !paymentId.trim()}
                   className="w-full bg-green-600 hover:bg-green-700"
                 >
                   {paymentLoading ? (

@@ -4,10 +4,10 @@ import { NextResponse } from "next/server"
 export async function POST(request) {
   try {
     const data = await request.json()
-    const { creatorUsername, supporterName, amount, message, paymentMethod } = data
+    const { creatorUsername, supporterName, amount, message, paymentMethod, paymentId } = data
 
     console.log("=== ADD SUPPORTER DEBUG ===")
-    console.log("Adding supporter:", { creatorUsername, supporterName, amount, paymentMethod })
+    console.log("Adding supporter:", { creatorUsername, supporterName, amount, paymentMethod, paymentId })
 
     if (!creatorUsername || !supporterName || !amount) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
@@ -27,6 +27,7 @@ export async function POST(request) {
       amount: Number.parseFloat(amount),
       message: message?.trim() || "",
       paymentMethod: paymentMethod || "direct",
+      paymentId: paymentId?.trim() || "",
       createdAt: new Date(),
       verified: paymentMethod === "direct" ? false : true, // Direct payments are unverified
     }

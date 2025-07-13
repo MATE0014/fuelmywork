@@ -131,6 +131,15 @@ export function ImageCropper({
                 onComplete={(c) => setCompletedCrop(c)}
                 aspect={aspectRatio}
                 className="max-h-96"
+                ruleOfThirds={true}
+                circularCrop={false}
+                keepSelection={true}
+                minWidth={50}
+                minHeight={50}
+                style={{
+                  maxWidth: "100%",
+                  maxHeight: "400px",
+                }}
               >
                 <img
                   ref={imgRef}
@@ -138,10 +147,19 @@ export function ImageCropper({
                   src={imageSrc || "/placeholder.svg"}
                   onLoad={onImageLoad}
                   className="max-h-96 max-w-full"
+                  style={{
+                    maxWidth: "100%",
+                    height: "auto",
+                  }}
                 />
               </ReactCrop>
             </div>
           )}
+
+          {/* Instructions */}
+          <div className="text-center text-sm text-gray-400">
+            <p>Drag the corners and edges to adjust the crop area</p>
+          </div>
 
           {/* Hidden canvas for cropping */}
           <canvas ref={canvasRef} className="hidden" />
