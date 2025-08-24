@@ -41,19 +41,19 @@ A modern web platform that connects creators with supporters, enabling direct fi
 
 | Variable | Description | Required |
 |----------|-------------|----------|
-| \`MONGODB_URI\` | MongoDB connection string | Yes |
-| \`NEXTAUTH_URL\` | Your app's URL | Yes |
-| \`NEXTAUTH_SECRET\` | NextAuth secret key | Yes |
-| \`GITHUB_ID\` | GitHub OAuth client ID | No |
-| \`GITHUB_SECRET\` | GitHub OAuth client secret | No |
-| \`NEXT_PUBLIC_RAZORPAY_KEY_ID\` | Razorpay public key | Yes |
-| \`RAZORPAY_KEY_SECRET\` | Razorpay secret key | Yes |
-| \`ENCRYPTION_KEY\` | 32-character encryption key | Yes |
+| `MONGODB_URI` | MongoDB connection string | Yes |
+| `NEXTAUTH_URL` | Your app's URL | Yes |
+| `NEXTAUTH_SECRET` | NextAuth secret key | Yes |
+| `GITHUB_ID` | GitHub OAuth client ID | No |
+| `GITHUB_SECRET` | GitHub OAuth client secret | No |
+| `NEXT_PUBLIC_RAZORPAY_KEY_ID` | Razorpay public key | Yes |
+| `RAZORPAY_KEY_SECRET` | Razorpay secret key | Yes |
+| `ENCRYPTION_KEY` | 32-character encryption key | Yes |
 
 ## 🗄️ Database Schema
 
 ### Users Collection
-\`\`\`javascript
+```javascript
 {
   _id: ObjectId,
   name: String,
@@ -78,10 +78,10 @@ A modern web platform that connects creators with supporters, enabling direct fi
   createdAt: Date,
   updatedAt: Date
 }
-\`\`\`
+```
 
 ### Supporters Collection
-\`\`\`javascript
+```javascript
 {
   _id: ObjectId,
   creatorId: ObjectId,
@@ -95,31 +95,31 @@ A modern web platform that connects creators with supporters, enabling direct fi
   createdAt: Date,
   verifiedAt: Date
 }
-\`\`\`
+```
 
 ## 🚦 API Routes
 
 ### Authentication
-- \`POST /api/auth/[...nextauth]\` - NextAuth.js authentication
+- `POST /api/auth/[...nextauth]` - NextAuth.js authentication
 
 ### User Management
-- \`GET /api/user/profile\` - Get user profile
-- \`PUT /api/user/profile\` - Update user profile
-- \`GET /api/user/profile-by-username\` - Get profile by username
-- \`POST /api/user/check-username\` - Check username availability
+- `GET /api/user/profile` - Get user profile
+- `PUT /api/user/profile` - Update user profile
+- `GET /api/user/profile-by-username` - Get profile by username
+- `POST /api/user/check-username` - Check username availability
 
 ### Creator Features
-- \`GET /api/creator/stats\` - Get creator statistics
-- \`GET /api/creator/pending-payments\` - Get pending payments
-- \`POST /api/creator/verify-payment\` - Verify a payment
+- `GET /api/creator/stats` - Get creator statistics
+- `GET /api/creator/pending-payments` - Get pending payments
+- `POST /api/creator/verify-payment` - Verify a payment
 
 ### Payments
-- \`POST /api/create-payment\` - Create Razorpay payment order
-- \`POST /api/verify-payment\` - Verify payment completion
-- \`POST /api/add-supporter\` - Add supporter after payment
+- `POST /api/create-payment` - Create Razorpay payment order
+- `POST /api/verify-payment` - Verify payment completion
+- `POST /api/add-supporter` - Add supporter after payment
 
 ### Search
-- \`GET /api/search-creators\` - Search creators by username
+- `GET /api/search-creators` - Search creators by username
 
 
 ## 🔐 Security Features
