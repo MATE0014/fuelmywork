@@ -4,6 +4,8 @@ import Footer from "@/components/Footer";
 import Navbar from "@/components/Navbar";
 import { Toaster } from "sonner";
 import { ClientProviders } from "@/components/client-providers"
+import { Analytics } from '@vercel/analytics/next';
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const raleway = Raleway({
   subsets: ["latin"],
@@ -35,6 +37,8 @@ export default function RootLayout({ children }) {
             {children}
             <Footer />
         </ClientProviders>
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
