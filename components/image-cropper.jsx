@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useRef } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
@@ -20,59 +20,99 @@ export function ImageCropper({ open, onClose, imageSrc, onCropComplete, aspect =
   const [completedCrop, setCompletedCrop] = useState(null)
   const [scale, setScale] = useState(1)
   const [rotate, setRotate] = useState(0)
-  const [imgRef, setImgRef] = useState(null)
+  const imgRef = useRef(null) // Use useRef instead of useState
 
-  const onImageLoad = useCallback((e) => {
-    setImgRef(e.currentTarget)
+  // Handle image load event
+  const handleImageLoad = useCallback((e) => {
+    console.log("[v0] Image loaded successfully")
+    setCompletedCrop({
+      unit: "%",
+      width: 90,
+      height: 90,
+      x: 5,
+      y: 5,
+    })
   }, [])
 
   const handleCropComplete = useCallback(() => {
-    if (!completedCrop || !imgRef) return
+    console.log("[v0] Apply Crop clicked - completedCrop:", completedCrop, "imgRef:", !!imgRef.current)
 
-    const canvas = document.createElement("canvas")
-    const ctx = canvas.getContext("2d")
+    const cropToUse = completedCrop || crop
 
-    if (!ctx) return
+    if (!cropToUse || !imgRef.current) {
+      console.log("[v0] Missing crop data or image ref - cropToUse:", cropToUse, "imgRef:", !!imgRef.current)
+      return
+    }
 
-    const scaleX = imgRef.naturalWidth / imgRef.width
-    const scaleY = imgRef.naturalHeight / imgRef.height
+    console.log("[v0] Processing crop with data:", cropToUse)
 
-    const pixelRatio = window.devicePixelRatio || 1
+    try {
+      const canvas = document.createElement("canvas")
+      const ctx = canvas.getContext("2d")
 
-    canvas.width = Math.floor(completedCrop.width * scaleX * pixelRatio)
-    canvas.height = Math.floor(completedCrop.height * scaleY * pixelRatio)
+      if (!ctx) {
+        console.log("[v0] Failed to get canvas context")
+        return
+      }
 
-    ctx.scale(pixelRatio, pixelRatio)
-    ctx.imageSmoothingQuality = "high"
+      if (!imgRef.current.naturalWidth || !imgRef.current.naturalHeight) {
+        console.log(
+          "[v0] Image not fully loaded - naturalWidth:",
+          imgRef.current.naturalWidth,
+          "naturalHeight:",
+          imgRef.current.naturalHeight,
+        )
+        return
+      }
 
-    const cropX = completedCrop.x * scaleX
-    const cropY = completedCrop.y * scaleY
+      const scaleX = imgRef.current.naturalWidth / imgRef.current.width
+      const scaleY = imgRef.current.naturalHeight / imgRef.current.height
 
-    const centerX = imgRef.naturalWidth / 2
-    const centerY = imgRef.naturalHeight / 2
+      const pixelRatio = window.devicePixelRatio || 1
 
-    ctx.save()
+      const cropWidth = Math.max(1, Math.floor(cropToUse.width * scaleX * pixelRatio))
+      const cropHeight = Math.max(1, Math.floor(cropToUse.height * scaleY * pixelRatio))
 
-    ctx.translate(-cropX, -cropY)
-    ctx.translate(centerX, centerY)
-    ctx.rotate((rotate * Math.PI) / 180)
-    ctx.scale(scale, scale)
-    ctx.translate(-centerX, -centerY)
-    ctx.drawImage(imgRef, 0, 0)
+      canvas.width = cropWidth
+      canvas.height = cropHeight
 
-    ctx.restore()
+      ctx.scale(pixelRatio, pixelRatio)
+      ctx.imageSmoothingQuality = "high"
 
-    canvas.toBlob(
-      (blob) => {
-        if (blob) {
-          onCropComplete(blob)
-          onClose()
-        }
-      },
-      "image/jpeg",
-      0.9,
-    )
-  }, [completedCrop, imgRef, scale, rotate, onCropComplete, onClose])
+      const cropX = cropToUse.x * scaleX
+      const cropY = cropToUse.y * scaleY
+
+      const centerX = imgRef.current.naturalWidth / 2
+      const centerY = imgRef.current.naturalHeight / 2
+
+      ctx.save()
+
+      ctx.translate(-cropX, -cropY)
+      ctx.translate(centerX, centerY)
+      ctx.rotate((rotate * Math.PI) / 180)
+      ctx.scale(scale, scale)
+      ctx.translate(-centerX, -centerY)
+      ctx.drawImage(imgRef.current, 0, 0)
+
+      ctx.restore()
+
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            console.log("[v0] Crop successful, blob size:", blob.size)
+            onCropComplete(blob)
+            onClose()
+          } else {
+            console.log("[v0] Failed to create blob from canvas")
+          }
+        },
+        "image/jpeg",
+        0.9,
+      )
+    } catch (error) {
+      console.error("[v0] Error during crop processing:", error)
+    }
+  }, [completedCrop, crop, scale, rotate, onCropComplete, onClose])
 
   const handleClose = () => {
     setCrop({
@@ -85,8 +125,11 @@ export function ImageCropper({ open, onClose, imageSrc, onCropComplete, aspect =
     setCompletedCrop(null)
     setScale(1)
     setRotate(0)
-    setImgRef(null)
     onClose()
+  }
+
+  const handleImageError = (e) => {
+    console.error("[v0] Image failed to load:", e)
   }
 
   return (
@@ -111,9 +154,11 @@ export function ImageCropper({ open, onClose, imageSrc, onCropComplete, aspect =
                 className="max-w-full"
               >
                 <img
-                  ref={onImageLoad}
+                  ref={imgRef}
                   alt="Crop preview"
                   src={imageSrc || "/placeholder.svg"}
+                  onLoad={handleImageLoad}
+                  onError={handleImageError}
                   style={{
                     transform: `scale(${scale}) rotate(${rotate}deg)`,
                     maxWidth: "100%",
@@ -167,7 +212,7 @@ export function ImageCropper({ open, onClose, imageSrc, onCropComplete, aspect =
                 onClick={() => setScale(1)}
                 variant="outline"
                 size="sm"
-                className="border-gray-600 text-gray-300 bg-transparent hover:bg-gray-700"
+                className="border-gray-600 text-gray-300 bg-transparent hover:bg-gray-700 hover:text-white"
               >
                 Reset Zoom
               </Button>
@@ -175,7 +220,7 @@ export function ImageCropper({ open, onClose, imageSrc, onCropComplete, aspect =
                 onClick={() => setRotate(0)}
                 variant="outline"
                 size="sm"
-                className="border-gray-600 text-gray-300 bg-transparent hover:bg-gray-700"
+                className="border-gray-600 text-gray-300 bg-transparent hover:bg-gray-700 hover:text-white"
               >
                 Reset Rotation
               </Button>
@@ -184,7 +229,7 @@ export function ImageCropper({ open, onClose, imageSrc, onCropComplete, aspect =
         </div>
 
         <DialogFooter className="gap-2">
-          <Button onClick={handleClose} variant="outline" className="border-gray-600 text-gray-300 bg-transparent">
+          <Button onClick={handleClose} variant="outline" className="border-red-600 text-gray-300 bg-transparent hover:bg-red-600 hover:text-white">
             Cancel
           </Button>
           <Button onClick={handleCropComplete} className="bg-blue-600 hover:bg-blue-700">

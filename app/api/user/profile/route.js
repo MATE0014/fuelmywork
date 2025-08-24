@@ -17,7 +17,7 @@ export async function GET(req) {
     const db = client.db("fuelmywork")
     const usersCollection = db.collection("users")
 
-    const user = await usersCollection.findOne({ _id: new ObjectId(session.user.id) }, { projection: { password: 0 } })
+    const user = await usersCollection.findOne({ _id: new ObjectId(session.user.id) })
 
     if (!user) {
       return new Response(JSON.stringify({ message: "User not found" }), {
@@ -26,7 +26,13 @@ export async function GET(req) {
       })
     }
 
-    return new Response(JSON.stringify(user), {
+    const { password, ...userWithoutPassword } = user
+    const responseUser = {
+      ...userWithoutPassword,
+      authProvider: password ? "credentials" : "github",
+    }
+
+    return new Response(JSON.stringify(responseUser), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     })
@@ -99,7 +105,6 @@ export async function PUT(req) {
     })
 
     if (existingUser) {
-      console.log("Username already taken:", username.trim())
       return new Response(JSON.stringify({ message: "Username is already taken" }), {
         status: 400,
         headers: { "Content-Type": "application/json" },

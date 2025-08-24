@@ -4,7 +4,7 @@ import { authOptions } from "../[...nextauth]/route"
 import clientPromise from "@/lib/mongodb"
 import bcrypt from "bcryptjs"
 import { generateOTP } from "@/lib/otp"
-import { sendOTPEmail } from "@/lib/email"
+import { sendOTPEmail, sendAccountDeletionNotificationEmail } from "@/lib/email"
 
 export async function POST(request) {
   try {
@@ -65,6 +65,8 @@ export async function POST(request) {
         paymentsCollection.deleteMany({ creatorId: user._id.toString() }),
         supportersCollection.deleteMany({ creatorId: user._id.toString() }),
       ])
+
+      await sendAccountDeletionNotificationEmail(user.email, user.name)
 
       return NextResponse.json({ message: "Account deleted successfully", deleted: true })
     }

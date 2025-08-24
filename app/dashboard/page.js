@@ -193,14 +193,12 @@ export default function DashboardPage() {
   const hasChanges = () => {
     // If there’s no original data (new account), always allow saving
     if (Object.keys(originalData).length === 0) {
-      console.log("New account → allow saving")
       return true
     }
 
     for (const key of Object.keys(formData)) {
       const current = formData[key] || ""
       const original = originalData[key] || ""
-      console.log(`[COMPARE] ${key}: current="${current}" | original="${original}"`)
 
       if (typeof current === "string" && typeof original === "string") {
         if (current.trim() !== original.trim()) {
@@ -215,7 +213,6 @@ export default function DashboardPage() {
   }
 
   const handleInputChange = (field, value) => {
-    console.log("Input changed:", field, value)
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
@@ -626,7 +623,7 @@ export default function DashboardPage() {
                   onClick={refreshDashboard}
                   disabled={refreshing}
                   variant="outline"
-                  className="border-blue-600 text-gray-300 bg-transparent hover:bg-gray-800 hover:text-white"
+                  className="border-gray-600 text-gray-300 bg-transparent hover:bg-gray-700"
                 >
                   {refreshing ? (
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -777,9 +774,9 @@ export default function DashboardPage() {
                 <CardContent>
                   <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                     <img
-                      src={user.image || "/placeholder.svg?height=64&width=64"}
+                      src={formData.profileImage || user.image || "/placeholder.svg?height=48&width=48"}
                       alt={user.name}
-                      className="w-16 h-16 rounded-full border-2 border-gray-600"
+                      className="w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-gray-600"
                     />
                     <div>
                       <h3 className="text-lg font-semibold text-white">{user.name}</h3>
@@ -946,7 +943,7 @@ export default function DashboardPage() {
                     <Button
                       onClick={resetChanges}
                       variant="outline"
-                      className="border-blue-600 bg-gray-700/50 text-gray-300 hover:bg-gray-600 hover:text-white w-full sm:w-auto "
+                      className="border-gray-600 bg-gray-700/50 text-gray-300 hover:bg-gray-600 w-full sm:w-auto"
                       size="sm"
                     >
                       Reset Changes
@@ -1109,7 +1106,7 @@ export default function DashboardPage() {
                     <Button
                       onClick={resetChanges}
                       variant="outline"
-                      className="border-blue-600 bg-gray-700/50 text-gray-300 hover:bg-gray-600 hover:text-white w-full sm:w-auto "
+                      className="border-gray-600 bg-gray-700/50 text-gray-300 hover:bg-gray-600 w-full sm:w-auto"
                       size="sm"
                     >
                       Reset Changes
@@ -1546,7 +1543,7 @@ export default function DashboardPage() {
             <DialogTitle>Delete Account</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            {session?.user?.password && (
+            {profile?.authProvider === "credentials" && (
               <div className="space-y-2">
                 <Label className="text-gray-300">Password</Label>
                 <div className="relative">

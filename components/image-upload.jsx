@@ -151,22 +151,6 @@ export function ImageUpload({
         )}
       </div>
 
-      {/* Action buttons for larger sizes */}
-      {size === "banner" && (
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            onClick={triggerFileInput}
-            variant="outline"
-            size="sm"
-            className="border-gray-600 text-gray-300 bg-transparent hover:bg-gray-700"
-          >
-            <Upload className="h-4 w-4 mr-2" />
-            {currentImage ? "Change Banner" : "Upload Banner"}
-          </Button>
-        </div>
-      )}
-
       <p className="text-xs text-gray-400">{description}</p>
 
       {/* Image Cropper Modal */}

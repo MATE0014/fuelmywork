@@ -26,33 +26,24 @@ export const authOptions = {
           const users = client.db("fuelmywork").collection("users")
           const user = await users.findOne({ email: credentials.email })
 
-          console.log("[v0] Login attempt for:", credentials.email)
-          console.log("[v0] User found:", !!user)
-
           if (!user) {
-            console.log("[v0] User not found")
             return null
           }
 
           if (!user.password) {
-            console.log("[v0] User has no password (OAuth user)")
             return null
           }
 
           const isPasswordValid = await bcrypt.compare(credentials.password, user.password)
-          console.log("[v0] Password valid:", isPasswordValid)
 
           if (!isPasswordValid) {
-            console.log("[v0] Invalid password")
             return null
           }
 
           if (!user.emailVerified) {
-            console.log("[v0] Email not verified")
             throw new Error("Please verify your email before signing in.")
           }
 
-          console.log("[v0] Login successful")
           return {
             id: user._id.toString(),
             email: user.email,
