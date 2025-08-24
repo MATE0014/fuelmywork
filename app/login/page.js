@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -12,12 +12,8 @@ import { toast } from "sonner"
 import { Loader2, Github, Eye, EyeOff } from "lucide-react"
 import Link from "next/link"
 
-export default function LoginPage() {
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
-  const [showPassword, setShowPassword] = useState(false)
-  const router = useRouter()
+// Separate component that uses useSearchParams
+function LoginMessageHandler() {
   const searchParams = useSearchParams()
 
   useEffect(() => {
@@ -26,6 +22,16 @@ export default function LoginPage() {
       toast.success(message)
     }
   }, [searchParams])
+
+  return null // This component doesn't render anything
+}
+
+function LoginForm() {
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const router = useRouter()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -157,5 +163,16 @@ export default function LoginPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <>
+      <Suspense fallback={null}>
+        <LoginMessageHandler />
+      </Suspense>
+      <LoginForm />
+    </>
   )
 }
