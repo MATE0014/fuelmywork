@@ -1,230 +1,192 @@
+import { getServerSession } from "next-auth/next"
+import { authOptions } from "../../auth/[...nextauth]/route"
 import clientPromise from "@/lib/mongodb"
-import { NextResponse } from "next/server"
-import crypto from "crypto"
+import { ObjectId } from "mongodb"
 
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY
-const ALGORITHM = "aes-256-cbc"
-
-if (!ENCRYPTION_KEY) {
-  console.error("ENCRYPTION_KEY environment variable is not set!")
-}
-
-function encrypt(text) {
-  if (!text || !ENCRYPTION_KEY) return text
+export async function GET(req) {
   try {
-    const iv = crypto.randomBytes(16)
-    const cipher = crypto.createCipher(ALGORITHM, ENCRYPTION_KEY)
-    let encrypted = cipher.update(text, "utf8", "hex")
-    encrypted += cipher.final("hex")
-    return iv.toString("hex") + ":" + encrypted
-  } catch (error) {
-    console.error("Encryption error:", error)
-    return text
-  }
-}
-
-function decrypt(text) {
-  if (!text || !ENCRYPTION_KEY) return text
-  try {
-    const textParts = text.split(":")
-    if (textParts.length !== 2) return text
-
-    const iv = Buffer.from(textParts.shift(), "hex")
-    const encryptedText = textParts.join(":")
-    const decipher = crypto.createDecipher(ALGORITHM, ENCRYPTION_KEY)
-    let decrypted = decipher.update(encryptedText, "hex", "utf8")
-    decrypted += decipher.final("utf8")
-    return decrypted
-  } catch (error) {
-    console.error("Decryption error:", error)
-    return text
-  }
-}
-
-// GET - Fetch user profile
-export async function GET(request) {
-  try {
-    const { searchParams } = new URL(request.url)
-    const userId = searchParams.get("userId")
-
-    console.log("=== PROFILE GET DEBUG (fuelmywork.users) ===")
-    console.log("Fetching profile for userId:", userId)
-
-    if (!userId) {
-      return NextResponse.json({ error: "User ID is required" }, { status: 400 })
-    }
-
-    const client = await clientPromise
-    // Explicitly connect to the 'fuelmywork' database for creator profiles
-    const db = client.db("fuelmywork")
-    const creatorProfilesCollection = db.collection("users") // Using 'users' collection as per your clarification
-
-    console.log("Connected to database: fuelmywork")
-    console.log("Collection for creator profiles: users")
-
-    const profile = await creatorProfilesCollection.findOne({ userId: userId })
-    console.log("Found profile for userId in fuelmywork.users:", profile ? "Yes" : "No")
-
-    if (!profile) {
-      console.log("No profile found in fuelmywork.users, returning empty profile")
-      return NextResponse.json({
-        username: "",
-        name: "",
-        email: "",
-        bio: "",
-        profileImage: "",
-        bannerImage: "",
-        razorpayId: "",
-        razorpaySecret: "",
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) {
+      return new Response(JSON.stringify({ message: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
       })
     }
 
-    const profileData = {
-      username: profile.username || "",
-      name: profile.name || "",
-      email: profile.email || "",
-      bio: profile.bio || "",
-      profileImage: profile.profileImage || "",
-      bannerImage: profile.bannerImage || "",
-      razorpayId: profile.razorpayId || "",
-      razorpaySecret: profile.razorpaySecret ? decrypt(profile.razorpaySecret) : "",
-      qrCodeImage: profile.qrCodeImage || "",
-      upiId: profile.upiId || "",
+    const client = await clientPromise
+    const db = client.db("fuelmywork")
+    const usersCollection = db.collection("users")
+
+    const user = await usersCollection.findOne({ _id: new ObjectId(session.user.id) }, { projection: { password: 0 } })
+
+    if (!user) {
+      return new Response(JSON.stringify({ message: "User not found" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      })
     }
 
-    console.log("Returning profile data:", { ...profileData, razorpaySecret: profileData.razorpaySecret ? "***" : "" })
-    console.log("=== END PROFILE GET DEBUG ===")
-
-    return NextResponse.json(profileData)
+    return new Response(JSON.stringify(user), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    })
   } catch (error) {
-    console.error("=== PROFILE GET ERROR (fuelmywork.users) ===")
-    console.error("Error fetching profile:", error)
-    console.error("Stack:", error.stack)
-    return NextResponse.json({ error: "Failed to fetch profile: " + error.message }, { status: 500 })
+    console.error("Error fetching user profile:", error)
+    return new Response(JSON.stringify({ message: "Internal server error" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    })
   }
 }
 
-// POST - Save user profile
-export async function POST(request) {
+export async function PUT(req) {
   try {
-    const data = await request.json()
-    const {
-      userId,
-      username,
-      name,
-      email,
-      bio,
-      profileImage,
-      bannerImage,
-      razorpayId,
-      razorpaySecret,
-      qrCodeImage,
-      upiId,
-    } = data
-
-    console.log("=== PROFILE SAVE DEBUG (fuelmywork.users) ===")
-    console.log("Saving profile for userId:", userId)
-    console.log("Username:", username)
-
-    if (!userId) {
-      return NextResponse.json({ error: "User ID is required" }, { status: 400 })
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) {
+      return new Response(JSON.stringify({ message: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      })
     }
 
-    if (!username || !username.trim()) {
-      return NextResponse.json({ error: "Username is required" }, { status: 400 })
+    const body = await req.json()
+
+    const { name, username, bio, profileImage, bannerImage, upiId, qrCodeImage, razorpayId, razorpaySecret } = body
+
+    // Validate required fields
+    if (!username || username.trim().length === 0) {
+      return new Response(JSON.stringify({ message: "Username is required" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      })
     }
 
+    // Validate username format
     const usernameRegex = /^[a-zA-Z0-9_-]+$/
     if (!usernameRegex.test(username.trim())) {
-      return NextResponse.json(
+      return new Response(
+        JSON.stringify({
+          message: "Username can only contain letters, numbers, hyphens, and underscores",
+        }),
         {
-          error: "Username can only contain letters, numbers, hyphens, and underscores",
+          status: 400,
+          headers: { "Content-Type": "application/json" },
         },
-        { status: 400 },
+      )
+    }
+
+    // Validate username length
+    if (username.trim().length < 3 || username.trim().length > 30) {
+      return new Response(
+        JSON.stringify({
+          message: "Username must be between 3 and 30 characters",
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
       )
     }
 
     const client = await clientPromise
-    // Explicitly connect to the 'fuelmywork' database for creator profiles
     const db = client.db("fuelmywork")
-    const creatorProfilesCollection = db.collection("users") // Using 'users' collection as per your clarification
+    const usersCollection = db.collection("users")
 
-    console.log("Connected to database: fuelmywork")
-    console.log("Collection for creator profiles: users")
-
-    const existingProfile = await creatorProfilesCollection.findOne({
-      username: username.toLowerCase().trim(),
-      userId: { $ne: userId },
+    // Check if username is already taken by another user
+    const existingUser = await usersCollection.findOne({
+      username: { $regex: new RegExp(`^${username.trim()}$`, "i") },
+      _id: { $ne: new ObjectId(session.user.id) },
     })
 
-    if (existingProfile) {
-      console.log("Username already taken by another user in fuelmywork.users")
-      return NextResponse.json({ error: "Username is already taken" }, { status: 400 })
+    if (existingUser) {
+      console.log("Username already taken:", username.trim())
+      return new Response(JSON.stringify({ message: "Username is already taken" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      })
     }
 
-    const profileData = {
-      userId, // This links to the NextAuth user ID from the 'test' database
-      username: username.toLowerCase().trim(),
-      name: name?.trim() || "",
-      email: email?.trim() || "",
-      bio: bio?.trim() || "",
-      profileImage: profileImage || "",
-      bannerImage: bannerImage || "",
-      razorpayId: razorpayId?.trim() || "",
-      razorpaySecret: razorpaySecret?.trim() ? encrypt(razorpaySecret.trim()) : "",
-      qrCodeImage: qrCodeImage || "",
-      upiId: upiId?.trim() || "",
+    // Validate image URLs if provided
+    const validateImageUrl = (url, fieldName, maxSizeMB = 5) => {
+      if (!url) return null
+
+      if (typeof url !== "string") {
+        throw new Error(`${fieldName} must be a valid URL string`)
+      }
+
+      // Allow data URLs (base64) and regular URLs
+      if (url.startsWith("data:image/") || url.startsWith("http://") || url.startsWith("https://")) {
+        // For data URLs, check approximate size (base64 is ~33% larger than binary)
+        if (url.startsWith("data:image/")) {
+          const sizeInBytes = (url.length * 3) / 4
+          const sizeInMB = sizeInBytes / (1024 * 1024)
+          if (sizeInMB > maxSizeMB) {
+            throw new Error(`${fieldName} is too large. Maximum size is ${maxSizeMB}MB`)
+          }
+        }
+        return url.trim()
+      }
+
+      throw new Error(`${fieldName} must be a valid image URL`)
+    }
+
+    // Prepare update data
+    const updateData = {
+      name: name?.trim() || null,
+      username: username.trim().toLowerCase(), // Store username in lowercase for consistency
+      bio: bio?.trim() || null,
+      profileImage: validateImageUrl(profileImage, "Profile image"),
+      bannerImage: validateImageUrl(bannerImage, "Banner image"),
+      upiId: upiId?.trim() || null,
+      qrCodeImage: validateImageUrl(qrCodeImage, "QR code image"),
+      razorpayId: razorpayId?.trim() || null,
+      razorpaySecret: razorpaySecret?.trim() || null,
       updatedAt: new Date(),
     }
 
-    console.log("Profile data to save to fuelmywork.users:", {
-      ...profileData,
-      razorpaySecret: profileData.razorpaySecret ? "***encrypted***" : "",
+    // Remove null values to avoid overwriting existing data with null
+    Object.keys(updateData).forEach((key) => {
+      if (updateData[key] === null || updateData[key] === "") {
+        delete updateData[key]
+      }
     })
 
-    const result = await creatorProfilesCollection.updateOne(
-      { userId: userId },
-      {
-        $set: profileData,
-        $setOnInsert: { createdAt: new Date() },
-      },
-      { upsert: true },
-    )
+    const result = await usersCollection.updateOne({ _id: new ObjectId(session.user.id) }, { $set: updateData })
 
-    console.log("MongoDB operation result (fuelmywork.users):", {
-      acknowledged: result.acknowledged,
-      matchedCount: result.matchedCount,
-      modifiedCount: result.modifiedCount,
-      upsertedCount: result.upsertedCount,
-      upsertedId: result.upsertedId,
-    })
-
-    const savedProfile = await creatorProfilesCollection.findOne({ userId: userId })
-    console.log("Verification - Profile saved successfully in fuelmywork.users:", !!savedProfile)
-    if (savedProfile) {
-      console.log("Saved profile username:", savedProfile.username)
+    if (result.matchedCount === 0) {
+      return new Response(JSON.stringify({ message: "User not found" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      })
     }
 
-    const totalProfilesAfter = await creatorProfilesCollection.countDocuments()
-    console.log("Total profiles in fuelmywork.users after save:", totalProfilesAfter)
+    // Fetch and return updated user data
+    const updatedUser = await usersCollection.findOne(
+      { _id: new ObjectId(session.user.id) },
+      { projection: { password: 0 } },
+    )
 
-    console.log("=== END PROFILE SAVE DEBUG ===")
-
-    return NextResponse.json({
-      success: true,
-      message: result.upsertedCount > 0 ? "Profile created successfully" : "Profile updated successfully",
-      isNewProfile: result.upsertedCount > 0,
-      wasModified: result.modifiedCount > 0,
-      debug: {
-        totalProfilesAfter,
-        profileExists: !!savedProfile,
-        savedUsername: savedProfile?.username,
+    return new Response(
+      JSON.stringify({
+        message: "Profile updated successfully",
+        user: updatedUser,
+        modifiedCount: result.modifiedCount,
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
       },
-    })
+    )
   } catch (error) {
-    console.error("=== PROFILE SAVE ERROR (fuelmywork.users) ===")
-    console.error("Error saving profile:", error)
-    console.error("Stack:", error.stack)
-    return NextResponse.json({ error: "Failed to save profile: " + error.message }, { status: 500 })
+    console.error("Error updating user profile:", error)
+    return new Response(
+      JSON.stringify({
+        message: error.message || "Internal server error",
+      }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      },
+    )
   }
 }

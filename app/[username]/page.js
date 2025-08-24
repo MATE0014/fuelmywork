@@ -59,16 +59,17 @@ const UserProfile = () => {
   const fetchProfile = async () => {
     try {
       setLoading(true)
-      console.log("Fetching profile for username:", username)
-
       const response = await fetch(`/api/user/profile-by-username?username=${username}`)
       const data = await response.json()
 
       if (response.ok) {
-        setProfile(data)
-        console.log("Profile loaded:", data)
+        // Normalize the flags so they are always booleans
+        setProfile({
+          ...data,
+          hasRazorpaySetup: !!data.hasRazorpaySetup,
+          hasPersonalPayment: !!data.hasPersonalPayment,
+        })
 
-        // Set default payment method based on availability
         if (data.hasRazorpaySetup) {
           setSelectedPaymentMethod("razorpay")
         } else if (data.hasPersonalPayment) {
@@ -76,7 +77,6 @@ const UserProfile = () => {
         }
       } else {
         setError(data.error || "Creator not found")
-        console.error("Failed to fetch profile:", data.error)
       }
     } catch (error) {
       console.error("Error fetching profile:", error)
@@ -508,9 +508,19 @@ const UserProfile = () => {
                               <div className="flex items-center gap-2">
                                 <span className="font-semibold text-white">{supporter.name}</span>
                                 {supporter.verified ? (
-                                  <Shield className="h-3 w-3 text-green-400" title="Verified payment" />
+                                  <div className="relative group">
+                                    <Shield className="h-3 w-3 text-green-400 cursor-pointer" />
+                                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-1 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
+                                      Verified
+                                    </div>
+                                  </div>
                                 ) : (
-                                  <AlertCircle className="h-3 w-3 text-yellow-400" title="Pending verification" />
+                                  <div className="relative group">
+                                    <AlertCircle className="h-3 w-3 text-yellow-400 cursor-pointer" />
+                                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-1 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
+                                      Pending Verification
+                                    </div>
+                                  </div>
                                 )}
                               </div>
                             </div>
@@ -584,11 +594,17 @@ const UserProfile = () => {
                 <Label className="text-gray-300">Payment Method</Label>
                 <Tabs value={selectedPaymentMethod} onValueChange={setSelectedPaymentMethod}>
                   <TabsList className="grid w-full grid-cols-2 bg-gray-700">
-                    <TabsTrigger value="razorpay" className="data-[state=active]:bg-gray-600 data-[state=active]:text-white text-gray-300">
+                    <TabsTrigger
+                      value="razorpay"
+                      className="data-[state=active]:bg-gray-600 data-[state=active]:text-white text-gray-300"
+                    >
                       <CreditCard className="h-4 w-4 mr-2" />
                       Razorpay
                     </TabsTrigger>
-                    <TabsTrigger value="personal" className="data-[state=active]:bg-gray-600 data-[state=active]:text-white text-gray-300">
+                    <TabsTrigger
+                      value="personal"
+                      className="data-[state=active]:bg-gray-600 data-[state=active]:text-white text-gray-300"
+                    >
                       <QrCode className="h-4 w-4 mr-2" />
                       Direct Payment
                     </TabsTrigger>

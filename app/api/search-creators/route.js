@@ -1,62 +1,66 @@
 import clientPromise from "@/lib/mongodb"
-import { NextResponse } from "next/server"
 
-export async function GET(request) {
+export async function GET(req) {
+  const { searchParams } = new URL(req.url)
+  const query = searchParams.get("q") || ""
+
   try {
-    const { searchParams } = new URL(request.url)
-    const query = searchParams.get("q")
-
-    console.log("=== SEARCH CREATORS DEBUG (fuelmywork.users) ===")
-    console.log("1. Search query:", query)
-
-    if (!query || query.trim().length < 2) {
-      console.log("2. Query too short, returning empty results")
-      return NextResponse.json({ creators: [] })
+    if (!query.trim()) {
+      return new Response(JSON.stringify({ creators: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
     }
 
     const client = await clientPromise
-    // Explicitly connect to the 'fuelmywork' database for creator profiles
-    const db = client.db("fuelmywork")
-    const creatorProfilesCollection = db.collection("users") // Using 'users' collection as per your clarification
+    const db = client.db("fuelmywork") // explicitly pick your db
 
-    const cleanQuery = query.trim()
-    console.log("3. Clean query:", cleanQuery)
+    const regex = { $regex: query.trim(), $options: "i" }
 
-    const totalProfiles = await creatorProfilesCollection.countDocuments()
-    console.log("4. Total profiles in fuelmywork.users:", totalProfiles)
-
-    const searchCriteria = {
-      $or: [{ username: { $regex: cleanQuery, $options: "i" } }, { name: { $regex: cleanQuery, $options: "i" } }],
-    }
-
-    console.log("5. Search criteria:", JSON.stringify(searchCriteria, null, 2))
-
-    const creators = await creatorProfilesCollection
-      .find(searchCriteria)
-      .limit(10)
+    // Search GitHub users collection
+    const githubUsers = await db
+      .collection("users") // assuming this is GitHub’s collection
+      .find({
+        $or: [{ name: regex }, { username: regex }],
+      })
       .project({
-        username: 1,
         name: 1,
+        username: 1,
         profileImage: 1,
         bio: 1,
+        _id: 0,
       })
+      .limit(10)
       .toArray()
 
-    console.log("6. Search results count:", creators.length)
-    console.log(
-      "7. Found creators:",
-      creators.map((c) => ({
-        username: c.username,
-        name: c.name,
-      })),
-    )
-    console.log("=== END SEARCH CREATORS DEBUG ===")
+    // Search Email users collection
+    const emailUsers = await db
+      .collection("emailUsers") // <-- replace with actual collection name
+      .find({
+        $or: [{ name: regex }, { username: regex }],
+      })
+      .project({
+        name: 1,
+        username: 1,
+        profileImage: 1,
+        bio: 1,
+        _id: 0,
+      })
+      .limit(10)
+      .toArray()
 
-    return NextResponse.json({ creators })
+    // Merge results and avoid duplicates
+    const merged = [...githubUsers, ...emailUsers]
+
+    return new Response(JSON.stringify({ creators: merged }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    })
   } catch (error) {
-    console.error("=== SEARCH CREATORS ERROR (fuelmywork.users) ===")
     console.error("Error searching creators:", error)
-    console.error("Stack trace:", error.stack)
-    return NextResponse.json({ error: "Search failed" }, { status: 500 })
+    return new Response(JSON.stringify({ message: "Internal server error" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    })
   }
 }

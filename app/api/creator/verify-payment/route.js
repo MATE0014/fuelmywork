@@ -1,79 +1,73 @@
+import { getServerSession } from "next-auth"
+import { authOptions } from "../../auth/[...nextauth]/route"
 import clientPromise from "@/lib/mongodb"
-import { NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
 
-export async function POST(request) {
+export async function POST(req) {
+  const session = await getServerSession(authOptions)
+
+  if (!session || !session.user || !session.user.id) {
+    return new Response(JSON.stringify({ message: "Not authenticated" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    })
+  }
+
   try {
-    const { paymentId, isVerified, creatorUsername } = await request.json()
-
-    console.log("=== VERIFY PAYMENT DEBUG ===")
-    console.log("Verifying payment:", { paymentId, isVerified, creatorUsername })
-
-    if (!paymentId || typeof isVerified !== "boolean" || !creatorUsername) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
-    }
-
     const client = await clientPromise
     const db = client.db("fuelmywork")
-    const supportersCollection = db.collection("supporters")
+    const paymentsCollection = db.collection("payments")
 
-    // Convert paymentId to ObjectId
-    let objectId
-    try {
-      objectId = new ObjectId(paymentId)
-    } catch (error) {
-      return NextResponse.json({ error: "Invalid payment ID" }, { status: 400 })
-    }
+    const requestBody = await req.json()
 
-    if (isVerified) {
-      // Mark payment as verified
-      const result = await supportersCollection.updateOne(
-        {
-          _id: objectId,
-          creatorUsername: creatorUsername.toLowerCase().trim(),
-          verified: false,
-        },
-        {
-          $set: {
-            verified: true,
-            verifiedAt: new Date(),
-          },
-        },
-      )
+    const { paymentId, status } = requestBody
 
-      console.log("Verification result:", result)
-
-      if (result.matchedCount === 0) {
-        return NextResponse.json({ error: "Payment not found or already verified" }, { status: 404 })
-      }
-
-      return NextResponse.json({
-        success: true,
-        message: "Payment verified successfully",
-      })
-    } else {
-      // Delete the payment (mark as invalid/rejected)
-      const result = await supportersCollection.deleteOne({
-        _id: objectId,
-        creatorUsername: creatorUsername.toLowerCase().trim(),
-        verified: false,
-      })
-
-      console.log("Deletion result:", result)
-
-      if (result.deletedCount === 0) {
-        return NextResponse.json({ error: "Payment not found" }, { status: 404 })
-      }
-
-      return NextResponse.json({
-        success: true,
-        message: "Payment rejected and removed",
+    if (!paymentId || !status) {
+      console.log("[v0] Missing required fields - paymentId:", paymentId, "status:", status)
+      return new Response(JSON.stringify({ message: "Payment ID and status are required" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
       })
     }
+
+    const paymentObjectId = new ObjectId(paymentId)
+    const creatorObjectId = new ObjectId(session.user.id)
+
+    // Find the payment and ensure it belongs to the current creator
+    const payment = await paymentsCollection.findOne({
+      _id: paymentObjectId,
+      creatorId: creatorObjectId,
+    })
+
+    if (!payment) {
+      return new Response(JSON.stringify({ message: "Payment not found or unauthorized" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+
+    // Update the payment status
+    const result = await paymentsCollection.updateOne(
+      { _id: paymentObjectId },
+      { $set: { status: status, updatedAt: new Date() } },
+    )
+
+    if (result.matchedCount === 0) {
+      return new Response(JSON.stringify({ message: "Payment not updated" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+
+    return new Response(JSON.stringify({ message: `Payment status updated to ${status}` }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    })
   } catch (error) {
-    console.error("=== VERIFY PAYMENT ERROR ===")
-    console.error("Error verifying payment:", error)
-    console.error("Stack:", error.stack)
-    return NextResponse.json({ error: "Failed to verify payment" }, { status: 500 })
+    console.error("Error verifying/updating creator payment:", error)
+    return new Response(JSON.stringify({ message: "Internal server error", error: error.message }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    })
   }
 }

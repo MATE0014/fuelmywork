@@ -1,116 +1,60 @@
-import clientPromise from "@/lib/mongodb"
+import Razorpay from "razorpay"
 import { NextResponse } from "next/server"
-import crypto from "crypto"
+import clientPromise from "@/lib/mongodb"
+import { ObjectId } from "mongodb"
+import crypto from "crypto" // Added missing crypto import
 
-export async function POST(request) {
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET,
+})
+
+export async function POST(req) {
   try {
-    const data = await request.json()
     const {
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature,
-      creatorUsername,
-      supporterName,
+      amount,
+      currency,
+      creatorId,
+      supporterId,
       message,
-      amount,
-    } = data
+    } = await req.json()
 
-    console.log("=== PAYMENT VERIFICATION DEBUG ===")
-    console.log("Verifying payment:", {
-      razorpay_order_id,
-      razorpay_payment_id,
-      creatorUsername,
-      supporterName,
-      amount,
-    })
+    // Verify the payment signature
+    const body = razorpay_order_id + "|" + razorpay_payment_id
+    const expectedSignature = crypto.createHmac("sha256", process.env.RAZORPAY_KEY_SECRET).update(body).digest("hex")
 
-    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-      return NextResponse.json({ error: "Missing payment verification data" }, { status: 400 })
+    const isAuthentic = expectedSignature === razorpay_signature
+
+    if (!isAuthentic) {
+      return NextResponse.json({ message: "Payment verification failed: Invalid signature" }, { status: 400 })
     }
 
-    // Get creator's Razorpay secret for verification
+    // If signature is authentic, save payment details to your database
     const client = await clientPromise
     const db = client.db("fuelmywork")
-    const usersCollection = db.collection("users")
+    const paymentsCollection = db.collection("payments")
 
-    const creator = await usersCollection.findOne({
-      username: creatorUsername.toLowerCase().trim(),
-    })
-
-    if (!creator || !creator.razorpaySecret) {
-      return NextResponse.json({ error: "Creator not found or Razorpay not configured" }, { status: 400 })
+    const paymentData = {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      amount: amount / 100, // Convert back to original currency unit
+      currency,
+      creatorId: new ObjectId(creatorId),
+      supporterId: new ObjectId(supporterId),
+      message,
+      status: "pending", // Changed status to pending for manual verification by creators
+      createdAt: new Date(),
     }
 
-    // Decrypt the Razorpay secret
-    const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY
-    const ALGORITHM = "aes-256-cbc"
+    await paymentsCollection.insertOne(paymentData)
 
-    function decrypt(text) {
-      if (!text || !ENCRYPTION_KEY) return text
-      try {
-        const textParts = text.split(":")
-        if (textParts.length !== 2) return text
-
-        const iv = Buffer.from(textParts.shift(), "hex")
-        const encryptedText = textParts.join(":")
-        const decipher = crypto.createDecipher(ALGORITHM, ENCRYPTION_KEY)
-        let decrypted = decipher.update(encryptedText, "hex", "utf8")
-        decrypted += decipher.final("utf8")
-        return decrypted
-      } catch (error) {
-        console.error("Decryption error:", error)
-        return text
-      }
-    }
-
-    const razorpaySecret = decrypt(creator.razorpaySecret)
-
-    // Verify payment signature
-    const body = razorpay_order_id + "|" + razorpay_payment_id
-    const expectedSignature = crypto.createHmac("sha256", razorpaySecret).update(body.toString()).digest("hex")
-
-    const isSignatureValid = expectedSignature === razorpay_signature
-
-    console.log("Payment verification result:", isSignatureValid)
-
-    if (isSignatureValid) {
-      // Save supporter to database
-      const supportersCollection = db.collection("supporters")
-
-      const supporterData = {
-        creatorUsername: creatorUsername.toLowerCase().trim(),
-        name: supporterName?.trim() || "Anonymous",
-        amount: Number.parseFloat(amount) || 0,
-        message: message?.trim() || "",
-        paymentMethod: "razorpay",
-        razorpayOrderId: razorpay_order_id,
-        razorpayPaymentId: razorpay_payment_id,
-        createdAt: new Date(),
-        verified: true,
-      }
-
-      console.log("Saving supporter data:", supporterData)
-
-      const supporterResult = await supportersCollection.insertOne(supporterData)
-
-      console.log("Supporter save result:", {
-        acknowledged: supporterResult.acknowledged,
-        insertedId: supporterResult.insertedId,
-      })
-
-      return NextResponse.json({
-        success: true,
-        message: "Payment verified and supporter recorded successfully",
-        supporterId: supporterResult.insertedId,
-      })
-    } else {
-      console.log("Payment signature verification failed")
-      return NextResponse.json({ error: "Payment verification failed" }, { status: 400 })
-    }
+    return NextResponse.json({ message: "Payment verified and recorded successfully" }, { status: 200 })
   } catch (error) {
-    console.error("=== PAYMENT VERIFICATION ERROR ===")
     console.error("Error verifying payment:", error)
-    console.error("Stack:", error.stack)
-    return NextResponse.json({ error: "Payment verification failed: " + error.message }, { status: 500 })
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

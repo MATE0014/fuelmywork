@@ -1,51 +1,66 @@
 import clientPromise from "@/lib/mongodb"
-import { NextResponse } from "next/server"
+import { ObjectId } from "mongodb"
 
-export async function GET(request) {
+export async function GET(req) {
+  const { searchParams } = new URL(req.url)
+  const username = searchParams.get("username")
+  const creatorId = searchParams.get("creatorId")
+
+  if (!username && !creatorId) {
+    return new Response(JSON.stringify({ message: "Username or Creator ID is required" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    })
+  }
+
   try {
-    const { searchParams } = new URL(request.url)
-    const username = searchParams.get("username")
-
-    console.log("=== SUPPORTERS GET DEBUG ===")
-    console.log("Fetching supporters for creatorUsername:", username)
-
-    if (!username) {
-      return NextResponse.json({ error: "Username is required" }, { status: 400 })
-    }
-
     const client = await clientPromise
     const db = client.db("fuelmywork")
-    const supportersCollection = db.collection("supporters")
+    const paymentsCollection = db.collection("payments")
+    const usersCollection = db.collection("users")
 
-    console.log("Connected to database: fuelmywork")
-    console.log("Collection: supporters")
+    let creatorObjectId
 
-    const supportersList = await supportersCollection
-      .find({ creatorUsername: username.toLowerCase().trim() })
+    if (username) {
+      const creator = await usersCollection.findOne({ username })
+      if (!creator) {
+        return new Response(JSON.stringify({ supporters: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      }
+      creatorObjectId = creator._id
+    } else {
+      creatorObjectId = new ObjectId(creatorId)
+    }
+
+    const payments = await paymentsCollection
+      .find({
+        creatorId: creatorObjectId,
+        status: { $in: ["completed", "pending"] },
+      })
       .sort({ createdAt: -1 })
-      .limit(50)
       .toArray()
 
-    console.log("Found supporters count:", supportersList.length)
-    console.log("Sample supporters:", supportersList.slice(0, 2))
-
-    // Format the supporters data
-    const formattedSupporters = supportersList.map((supporter) => ({
-      name: supporter.name,
-      amount: supporter.amount,
-      message: supporter.message || "",
-      paymentMethod: supporter.paymentMethod || "unknown",
-      verified: supporter.verified || false,
-      createdAt: supporter.createdAt,
+    const supporters = payments.map((payment) => ({
+      name: payment.supporterName || "Anonymous",
+      amount: payment.amount,
+      message: payment.message || "",
+      verified: payment.status === "completed",
+      createdAt: payment.createdAt,
+      paymentMethod: payment.paymentMethod || "unknown",
+      paymentId: payment.paymentId,
     }))
 
-    console.log("=== END SUPPORTERS GET DEBUG ===")
-
-    return NextResponse.json({ supporters: formattedSupporters })
+    return new Response(JSON.stringify({ supporters }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    })
   } catch (error) {
-    console.error("=== SUPPORTERS GET ERROR ===")
     console.error("Error fetching supporters:", error)
-    console.error("Stack:", error.stack)
-    return NextResponse.json({ error: "Failed to fetch supporters" }, { status: 500 })
+    return new Response(JSON.stringify({ supporters: [] }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    })
   }
 }

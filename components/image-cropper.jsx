@@ -1,124 +1,101 @@
 "use client"
 
-import { useState, useRef, useCallback } from "react"
-import ReactCrop, { centerCrop, makeAspectCrop } from "react-image-crop"
-import { Button } from "@/components/ui/button"
+import { useState, useCallback } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { CropIcon, RotateCcw } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Slider } from "@/components/ui/slider"
+import { Label } from "@/components/ui/label"
+import ReactCrop from "react-image-crop"
 import "react-image-crop/dist/ReactCrop.css"
+import { Crop, RotateCw, ZoomIn } from "lucide-react"
 
-function centerAspectCrop(mediaWidth, mediaHeight, aspect) {
-  return centerCrop(
-    makeAspectCrop(
-      {
-        unit: "%",
-        width: 90,
-      },
-      aspect,
-      mediaWidth,
-      mediaHeight,
-    ),
-    mediaWidth,
-    mediaHeight,
-  )
-}
+export function ImageCropper({ open, onClose, imageSrc, onCropComplete, aspect = 1, circularCrop = false, title }) {
+  const [crop, setCrop] = useState({
+    unit: "%",
+    width: 90,
+    height: 90,
+    x: 5,
+    y: 5,
+  })
+  const [completedCrop, setCompletedCrop] = useState(null)
+  const [scale, setScale] = useState(1)
+  const [rotate, setRotate] = useState(0)
+  const [imgRef, setImgRef] = useState(null)
 
-export function ImageCropper({
-  isOpen,
-  onClose,
-  imageSrc,
-  onCropComplete,
-  aspectRatio = null, // null for free crop, 1 for square, 16/9 for banner, etc.
-  title = "Crop Image",
-}) {
-  const [crop, setCrop] = useState()
-  const [completedCrop, setCompletedCrop] = useState()
-  const imgRef = useRef(null)
-  const canvasRef = useRef(null)
+  const onImageLoad = useCallback((e) => {
+    setImgRef(e.currentTarget)
+  }, [])
 
-  const onImageLoad = useCallback(
-    (e) => {
-      if (aspectRatio) {
-        const { width, height } = e.currentTarget
-        setCrop(centerAspectCrop(width, height, aspectRatio))
-      }
-    },
-    [aspectRatio],
-  )
+  const handleCropComplete = useCallback(() => {
+    if (!completedCrop || !imgRef) return
 
-  const getCroppedImg = useCallback(async () => {
-    if (!completedCrop || !imgRef.current || !canvasRef.current) {
-      return null
-    }
-
-    const image = imgRef.current
-    const canvas = canvasRef.current
-    const crop = completedCrop
-
-    const scaleX = image.naturalWidth / image.width
-    const scaleY = image.naturalHeight / image.height
+    const canvas = document.createElement("canvas")
     const ctx = canvas.getContext("2d")
-    const pixelRatio = window.devicePixelRatio
 
-    canvas.width = crop.width * pixelRatio * scaleX
-    canvas.height = crop.height * pixelRatio * scaleY
+    if (!ctx) return
 
-    ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
+    const scaleX = imgRef.naturalWidth / imgRef.width
+    const scaleY = imgRef.naturalHeight / imgRef.height
+
+    const pixelRatio = window.devicePixelRatio || 1
+
+    canvas.width = Math.floor(completedCrop.width * scaleX * pixelRatio)
+    canvas.height = Math.floor(completedCrop.height * scaleY * pixelRatio)
+
+    ctx.scale(pixelRatio, pixelRatio)
     ctx.imageSmoothingQuality = "high"
 
-    ctx.drawImage(
-      image,
-      crop.x * scaleX,
-      crop.y * scaleY,
-      crop.width * scaleX,
-      crop.height * scaleY,
-      0,
-      0,
-      crop.width * scaleX,
-      crop.height * scaleY,
+    const cropX = completedCrop.x * scaleX
+    const cropY = completedCrop.y * scaleY
+
+    const centerX = imgRef.naturalWidth / 2
+    const centerY = imgRef.naturalHeight / 2
+
+    ctx.save()
+
+    ctx.translate(-cropX, -cropY)
+    ctx.translate(centerX, centerY)
+    ctx.rotate((rotate * Math.PI) / 180)
+    ctx.scale(scale, scale)
+    ctx.translate(-centerX, -centerY)
+    ctx.drawImage(imgRef, 0, 0)
+
+    ctx.restore()
+
+    canvas.toBlob(
+      (blob) => {
+        if (blob) {
+          onCropComplete(blob)
+          onClose()
+        }
+      },
+      "image/jpeg",
+      0.9,
     )
+  }, [completedCrop, imgRef, scale, rotate, onCropComplete, onClose])
 
-    return new Promise((resolve) => {
-      canvas.toBlob(
-        (blob) => {
-          if (!blob) {
-            console.error("Canvas is empty")
-            return
-          }
-          const reader = new FileReader()
-          reader.onload = () => resolve(reader.result)
-          reader.readAsDataURL(blob)
-        },
-        "image/jpeg",
-        0.9,
-      )
+  const handleClose = () => {
+    setCrop({
+      unit: "%",
+      width: 90,
+      height: 90,
+      x: 5,
+      y: 5,
     })
-  }, [completedCrop])
-
-  const handleCropComplete = async () => {
-    const croppedImage = await getCroppedImg()
-    if (croppedImage) {
-      onCropComplete(croppedImage)
-      onClose()
-    }
-  }
-
-  const resetCrop = () => {
-    if (imgRef.current && aspectRatio) {
-      const { width, height } = imgRef.current
-      setCrop(centerAspectCrop(width, height, aspectRatio))
-    } else {
-      setCrop(undefined)
-    }
+    setCompletedCrop(null)
+    setScale(1)
+    setRotate(0)
+    setImgRef(null)
+    onClose()
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl bg-gray-800 border-gray-600 text-white">
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="bg-gray-800 border-gray-600 max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <CropIcon className="h-5 w-5" />
-            {title}
+          <DialogTitle className="text-white flex items-center gap-2">
+            <Crop className="h-5 w-5 text-blue-400" />
+            Crop {title}
           </DialogTitle>
         </DialogHeader>
 
@@ -129,59 +106,88 @@ export function ImageCropper({
                 crop={crop}
                 onChange={(_, percentCrop) => setCrop(percentCrop)}
                 onComplete={(c) => setCompletedCrop(c)}
-                aspect={aspectRatio}
-                className="max-h-96"
-                ruleOfThirds={true}
-                circularCrop={false}
-                keepSelection={true}
-                minWidth={50}
-                minHeight={50}
-                style={{
-                  maxWidth: "100%",
-                  maxHeight: "400px",
-                }}
+                aspect={aspect}
+                circularCrop={circularCrop}
+                className="max-w-full"
               >
                 <img
-                  ref={imgRef}
+                  ref={onImageLoad}
                   alt="Crop preview"
                   src={imageSrc || "/placeholder.svg"}
-                  onLoad={onImageLoad}
-                  className="max-h-96 max-w-full"
                   style={{
+                    transform: `scale(${scale}) rotate(${rotate}deg)`,
                     maxWidth: "100%",
-                    height: "auto",
+                    maxHeight: "400px",
                   }}
+                  className="max-w-full h-auto"
                 />
               </ReactCrop>
             </div>
           )}
 
-          {/* Instructions */}
-          <div className="text-center text-sm text-gray-400">
-            <p>Drag the corners and edges to adjust the crop area</p>
-          </div>
+          {/* Controls */}
+          <div className="space-y-4 bg-gray-700/50 p-4 rounded-lg">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Scale Control */}
+              <div className="space-y-2">
+                <Label className="text-gray-300 flex items-center gap-2">
+                  <ZoomIn className="h-4 w-4" />
+                  Zoom: {scale.toFixed(1)}x
+                </Label>
+                <Slider
+                  value={[scale]}
+                  onValueChange={(value) => setScale(value[0])}
+                  min={0.5}
+                  max={3}
+                  step={0.1}
+                  className="w-full"
+                />
+              </div>
 
-          {/* Hidden canvas for cropping */}
-          <canvas ref={canvasRef} className="hidden" />
+              {/* Rotate Control */}
+              <div className="space-y-2">
+                <Label className="text-gray-300 flex items-center gap-2">
+                  <RotateCw className="h-4 w-4" />
+                  Rotate: {rotate}°
+                </Label>
+                <Slider
+                  value={[rotate]}
+                  onValueChange={(value) => setRotate(value[0])}
+                  min={-180}
+                  max={180}
+                  step={15}
+                  className="w-full"
+                />
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="flex gap-2 justify-center">
+              <Button
+                onClick={() => setScale(1)}
+                variant="outline"
+                size="sm"
+                className="border-gray-600 text-gray-300 bg-transparent hover:bg-gray-700"
+              >
+                Reset Zoom
+              </Button>
+              <Button
+                onClick={() => setRotate(0)}
+                variant="outline"
+                size="sm"
+                className="border-gray-600 text-gray-300 bg-transparent hover:bg-gray-700"
+              >
+                Reset Rotation
+              </Button>
+            </div>
+          </div>
         </div>
 
-        <DialogFooter className="flex gap-2">
-          <Button
-            onClick={resetCrop}
-            variant="outline"
-            className="border-gray-600 bg-transparent text-gray-300 hover:bg-gray-700"
-          >
-            <RotateCcw className="h-4 w-4 mr-2" />
-            Reset
-          </Button>
-          <Button
-            onClick={onClose}
-            variant="outline"
-            className="border-gray-600 bg-transparent text-gray-300 hover:bg-gray-700"
-          >
+        <DialogFooter className="gap-2">
+          <Button onClick={handleClose} variant="outline" className="border-gray-600 text-gray-300 bg-transparent">
             Cancel
           </Button>
-          <Button onClick={handleCropComplete} className="bg-blue-600 hover:bg-blue-700" disabled={!completedCrop}>
+          <Button onClick={handleCropComplete} className="bg-blue-600 hover:bg-blue-700">
             Apply Crop
           </Button>
         </DialogFooter>

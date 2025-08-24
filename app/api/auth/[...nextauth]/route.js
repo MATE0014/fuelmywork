@@ -5,12 +5,12 @@ import { MongoDBAdapter } from "@auth/mongodb-adapter"
 import clientPromise from "@/lib/mongodb"
 import bcrypt from "bcryptjs"
 
-const handler = NextAuth({
+export const authOptions = {
   adapter: MongoDBAdapter(clientPromise),
   providers: [
     GitHubProvider({
-      clientId: process.env.GITHUB_CLIENT_ID,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET,
+      clientId: process.env.GITHUB_ID,
+      clientSecret: process.env.GITHUB_SECRET,
     }),
     CredentialsProvider({
       name: "credentials",
@@ -25,27 +25,33 @@ const handler = NextAuth({
 
         try {
           const client = await clientPromise
-          const users = client.db().collection("users")
-
-          // Find user by email
+          const users = client.db("fuelmywork").collection("users")
           const user = await users.findOne({ email: credentials.email })
 
-          if (!user || !user.password) {
+          if (!user) {
             return null
           }
 
-          // Verify password
+          if (!user.password) {
+            return null
+          }
+
           const isPasswordValid = await bcrypt.compare(credentials.password, user.password)
 
           if (!isPasswordValid) {
             return null
           }
 
+          if (!user.emailVerified) {
+            throw new Error("Please verify your email before signing in.")
+          }
+
           return {
             id: user._id.toString(),
             email: user.email,
             name: user.name,
-            username: user.username,
+            image: user.image,
+            provider: "credentials",
           }
         } catch (error) {
           console.error("Auth error:", error)
@@ -55,35 +61,29 @@ const handler = NextAuth({
     }),
   ],
   callbacks: {
-    async session({ session, user, token }) {
-      // Add user id to session
-      if (session?.user) {
-        if (user?.id) {
-          session.user.id = user.id
-        } else if (token?.sub) {
-          session.user.id = token.sub
-        }
-      }
-      return session
-    },
-    async jwt({ token, user }) {
+    async jwt({ token, user, account }) {
       if (user) {
-        token.id = user.id
+        token.provider = account?.provider || user.provider || "unknown"
       }
       return token
     },
-    async signIn({ user, account, profile }) {
-      // This runs after successful OAuth sign in
-      console.log("User signed in:", { user, account, profile })
-      return true
+    async session({ session, token }) {
+      if (token) {
+        session.user.id = token.sub
+        session.user.provider = token.provider
+      }
+      return session
     },
   },
   pages: {
     signIn: "/login",
+    error: "/login",
   },
   session: {
-    strategy: "jwt", // Changed to JWT for credentials provider
+    strategy: "jwt",
   },
-})
+  secret: process.env.NEXTAUTH_SECRET,
+}
 
+const handler = NextAuth(authOptions)
 export { handler as GET, handler as POST }

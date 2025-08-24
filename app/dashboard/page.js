@@ -1,235 +1,221 @@
 "use client"
 
+import { useState, useEffect } from "react"
+import { useAuth } from "@/contexts/AuthContext"
+import { signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useAuth } from "@/contexts/AuthContext"
-import { useRouter } from "next/navigation"
-import { useEffect, useState, useRef } from "react"
+import { Badge } from "@/components/ui/badge"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { toast } from "sonner"
-import { ImageCropper } from "@/components/image-cropper"
+import { useRef } from "react"
 import {
+  Loader2,
   User,
+  CreditCard,
+  Users,
+  RefreshCw,
+  Github,
+  CheckCircle,
+  AlertCircle,
+  Shield,
+  Eye,
+  Copy,
   Heart,
   TrendingUp,
   DollarSign,
-  Users,
-  Upload,
-  Save,
-  Eye,
-  Copy,
-  AlertCircle,
-  CheckCircle,
-  Edit,
-  Loader2,
   QrCode,
-  CreditCard,
-  Crop,
+  Save,
+  Key,
+  Trash2,
+  FileText,
+  EyeOff,
 } from "lucide-react"
+import { ImageUpload } from "@/components/image-upload"
+import Link from "next/link"
 
-const Dashboard = () => {
+export default function DashboardPage() {
   const { user, loading: authLoading } = useAuth()
-  const router = useRouter()
-  const [loading, setLoading] = useState(false)
+  const [profile, setProfile] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [stats, setStats] = useState(null)
+  const [pendingPayments, setPendingPayments] = useState([])
+  const [originalData, setOriginalData] = useState({})
   const [usernameStatus, setUsernameStatus] = useState("")
   const [checkingUsername, setCheckingUsername] = useState(false)
-  const [dataLoading, setDataLoading] = useState(true)
-  const [profileLoaded, setProfileLoaded] = useState(false) // Track if profile has been loaded
-  const loadAttemptedRef = useRef(false) // Prevent multiple simultaneous loads
 
-  // Image cropping states
-  const [cropperOpen, setCropperOpen] = useState(false)
-  const [cropperImage, setCropperImage] = useState("")
-  const [cropperField, setCropperField] = useState("")
-  const [cropperAspect, setCropperAspect] = useState(null)
+  // Security modals
+  const [passwordChangeModal, setPasswordChangeModal] = useState(false)
+  const [deleteAccountModal, setDeleteAccountModal] = useState(false)
+  const [passwordChangeData, setPasswordChangeData] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+    otp: "",
+  })
+  const [deleteAccountData, setDeleteAccountData] = useState({
+    password: "",
+    otp: "",
+    confirmDelete: "",
+  })
+  const [otpSent, setOtpSent] = useState({ password: false, delete: false })
 
-  // Profile form state
-  const [profileData, setProfileData] = useState({
-    username: "",
+  // Form states
+  const [formData, setFormData] = useState({
     name: "",
-    email: "",
+    username: "",
     bio: "",
     profileImage: "",
     bannerImage: "",
+    upiId: "",
+    qrCodeImage: "",
     razorpayId: "",
     razorpaySecret: "",
-    qrCodeImage: "",
-    upiId: "",
   })
 
-  // Original data to track changes
-  const [originalData, setOriginalData] = useState({})
-  const [hasChanges, setHasChanges] = useState(false)
+  const [paymentLogs, setPaymentLogs] = useState([])
+  const [loadingLogs, setLoadingLogs] = useState(false)
 
-  const [supporterStats, setSupporterStats] = useState({
-    totalSupporters: 0,
-    totalEarned: 0,
-    thisMonth: 0,
-    pendingVerification: 0,
+  const [passwordVisibility, setPasswordVisibility] = useState({
+    currentPassword: false,
+    newPassword: false,
+    confirmPassword: false,
+    deletePassword: false,
   })
-  const [pendingPayments, setPendingPayments] = useState([])
-  const [verifyingPayment, setVerifyingPayment] = useState(null)
 
-  useEffect(() => {
-    // Redirect if not logged in
-    if (!authLoading && !user) {
-      router.push("/login")
-      return
-    }
+  const [resendTimeout, setResendTimeout] = useState({
+    password: 0,
+    delete: 0,
+  })
 
-    // Load user profile data when user is available and profile hasn't been loaded yet
-    if (user && user.id && !profileLoaded && !loadAttemptedRef.current) {
-      loadAttemptedRef.current = true
-      loadUserProfile()
-    }
-  }, [user, authLoading, router, profileLoaded])
-
-  // Check for changes whenever profileData updates
-  useEffect(() => {
-    if (Object.keys(originalData).length > 0) {
-      const dataChanged = Object.keys(profileData).some((key) => {
-        const current = profileData[key] || ""
-        const original = originalData[key] || ""
-        return current !== original
-      })
-      setHasChanges(dataChanged)
-    }
-  }, [profileData, originalData])
-
-  const loadUserProfile = async () => {
-    if (!user?.id || profileLoaded) return
-
-    setDataLoading(true)
+  const fetchProfile = async () => {
     try {
-      console.log("Loading profile for user:", user.id)
-      const response = await fetch(`/api/user/profile?userId=${user.id}`)
-
+      const response = await fetch("/api/user/profile")
       if (response.ok) {
         const data = await response.json()
-        console.log("Loaded profile data:", data)
+        setProfile(data)
 
-        // Pre-fill with GitHub data if profile is empty
         const cleanData = {
+          name: data.name || user?.name || "",
           username: data.username || "",
-          name: data.name || user.name || "",
-          email: data.email || user.email || "",
           bio: data.bio || "",
-          profileImage: data.profileImage || user.image || "",
+          profileImage: data.profileImage || user?.image || "",
           bannerImage: data.bannerImage || "",
+          upiId: data.upiId || "",
+          qrCodeImage: data.qrCodeImage || "",
           razorpayId: data.razorpayId || "",
           razorpaySecret: data.razorpaySecret || "",
-          qrCodeImage: data.qrCodeImage || "",
-          upiId: data.upiId || "",
         }
 
-        setProfileData(cleanData)
-        setOriginalData(cleanData)
-        setProfileLoaded(true) // Mark profile as loaded
-        setHasChanges(false) // Reset changes state
+        setFormData(cleanData)
+        setOriginalData({ ...cleanData })
+      }
+    } catch (error) {
+      console.error("Error fetching profile:", error)
+      toast.error("Failed to load profile")
+    } finally {
+      setLoading(false)
+    }
+  }
 
-        // Load stats and pending payments AFTER profile data is set
-        if (cleanData.username) {
-          console.log("Loading stats for username:", cleanData.username)
-          await loadSupporterStats(cleanData.username)
-          await loadPendingPayments(cleanData.username)
+  const fetchStats = async () => {
+    try {
+      const response = await fetch("/api/creator/stats")
+      if (response.ok) {
+        const data = await response.json()
+        setStats(data)
+      }
+    } catch (error) {
+      console.error("Error fetching stats:", error)
+    }
+  }
+
+  const fetchPendingPayments = async () => {
+    try {
+      const response = await fetch("/api/creator/pending-payments")
+      if (response.ok) {
+        const data = await response.json()
+        setPendingPayments(data || [])
+      }
+    } catch (error) {
+      console.error("Error fetching pending payments:", error)
+    }
+  }
+
+  const fetchPaymentLogs = async () => {
+    setLoadingLogs(true)
+    try {
+      const response = await fetch("/api/creator/payment-logs")
+      if (response.ok) {
+        const data = await response.json()
+        setPaymentLogs(data.logs || [])
+      } else {
+        console.error("Failed to fetch payment logs")
+      }
+    } catch (error) {
+      console.error("Error fetching payment logs:", error)
+    } finally {
+      setLoadingLogs(false)
+    }
+  }
+
+  const refreshDashboard = async () => {
+    setRefreshing(true)
+    await Promise.all([fetchProfile(), fetchStats(), fetchPendingPayments()])
+    setRefreshing(false)
+    toast.success("Dashboard refreshed!")
+  }
+
+  useEffect(() => {
+    if (user && !authLoading) {
+      fetchProfile()
+      fetchStats()
+      fetchPendingPayments()
+    }
+  }, [user, authLoading])
+
+  useEffect(() => {
+    if (user) {
+      fetchStats()
+      fetchPendingPayments()
+      fetchPaymentLogs() // Added payment logs fetch
+    }
+  }, [user])
+
+  // Check if there are any changes
+  const hasChanges = () => {
+    // If there’s no original data (new account), always allow saving
+    if (Object.keys(originalData).length === 0) {
+      console.log("New account → allow saving")
+      return true
+    }
+
+    for (const key of Object.keys(formData)) {
+      const current = formData[key] || ""
+      const original = originalData[key] || ""
+      console.log(`[COMPARE] ${key}: current="${current}" | original="${original}"`)
+
+      if (typeof current === "string" && typeof original === "string") {
+        if (current.trim() !== original.trim()) {
+          return true
         }
-
-        toast.success("Profile loaded successfully")
-      } else {
-        const errorData = await response.json()
-        console.error("Failed to load profile:", errorData)
-        toast.error("Failed to load profile data")
+      } else if (current !== original) {
+        return true
       }
-    } catch (error) {
-      console.error("Error loading profile:", error)
-      toast.error("Error loading profile data")
-    } finally {
-      setDataLoading(false)
-      loadAttemptedRef.current = false // Allow future loads if needed
-    }
-  }
-
-  const loadSupporterStats = async (username) => {
-    if (!username) {
-      console.log("No username provided for stats loading")
-      return
     }
 
-    try {
-      console.log("Fetching supporter stats for:", username)
-      const response = await fetch(`/api/creator/stats?username=${username}`)
-      if (response.ok) {
-        const data = await response.json()
-        console.log("Supporter stats loaded:", data)
-        setSupporterStats(data)
-      } else {
-        console.error("Failed to load supporter stats:", response.status)
-      }
-    } catch (error) {
-      console.error("Error loading supporter stats:", error)
-    }
-  }
-
-  const loadPendingPayments = async (username) => {
-    if (!username) {
-      console.log("No username provided for pending payments loading")
-      return
-    }
-
-    try {
-      console.log("Fetching pending payments for:", username)
-      const response = await fetch(`/api/creator/pending-payments?username=${username}`)
-      if (response.ok) {
-        const data = await response.json()
-        console.log("Pending payments loaded:", data.payments?.length || 0)
-        setPendingPayments(data.payments || [])
-      } else {
-        console.error("Failed to load pending payments:", response.status)
-      }
-    } catch (error) {
-      console.error("Error loading pending payments:", error)
-    }
-  }
-
-  const verifyPayment = async (paymentId, isVerified) => {
-    setVerifyingPayment(paymentId)
-    try {
-      const response = await fetch("/api/creator/verify-payment", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          paymentId,
-          isVerified,
-          creatorUsername: profileData.username,
-        }),
-      })
-
-      if (response.ok) {
-        toast.success(isVerified ? "Payment verified successfully!" : "Payment marked as invalid")
-        // Refresh data with current username
-        await loadPendingPayments(profileData.username)
-        await loadSupporterStats(profileData.username)
-      } else {
-        toast.error("Failed to update payment status")
-      }
-    } catch (error) {
-      console.error("Error verifying payment:", error)
-      toast.error("Failed to update payment status")
-    } finally {
-      setVerifyingPayment(null)
-    }
+    return false
   }
 
   const handleInputChange = (field, value) => {
-    setProfileData((prev) => ({
-      ...prev,
-      [field]: value,
-    }))
+    console.log("Input changed:", field, value)
+    setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
   const checkUsernameAvailability = async (username) => {
@@ -253,69 +239,49 @@ const Dashboard = () => {
 
     setCheckingUsername(true)
     try {
-      const response = await fetch(`/api/user/check-username?username=${username}&userId=${user.id}`)
+      const response = await fetch(`/api/user/check-username-availability?username=${username}&userId=${user.id}`)
       const result = await response.json()
 
-      if (result.available) {
-        setUsernameStatus("✓ Username is available")
+      if (response.ok) {
+        if (result.available) {
+          setUsernameStatus("✓ Username is available")
+        } else {
+          setUsernameStatus("✗ Username is already taken")
+        }
       } else {
-        setUsernameStatus("✗ Username is already taken")
+        setUsernameStatus(result.message || "Error checking username")
       }
     } catch (error) {
+      console.error("Username check error:", error)
       setUsernameStatus("Error checking username")
     } finally {
       setCheckingUsername(false)
     }
   }
 
+  const usernameCheckTimeout = useRef(null)
+
   const handleUsernameChange = (value) => {
     handleInputChange("username", value)
     setUsernameStatus("")
 
-    // Debounce username checking
-    const timeoutId = setTimeout(() => {
+    if (usernameCheckTimeout.current) {
+      clearTimeout(usernameCheckTimeout.current)
+    }
+
+    usernameCheckTimeout.current = setTimeout(() => {
       checkUsernameAvailability(value)
     }, 500)
-
-    return () => clearTimeout(timeoutId)
   }
 
-  const handleImageUpload = (field, event) => {
-    const file = event.target.files[0]
-    if (file) {
-      // Check file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error("Image size should be less than 5MB")
-        return
-      }
-
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        setCropperImage(e.target.result)
-        setCropperField(field)
-
-        // Set aspect ratio based on field
-        if (field === "profileImage") {
-          setCropperAspect(1) // Square for profile
-        } else if (field === "bannerImage") {
-          setCropperAspect(16 / 9) // Widescreen for banner
-        } else if (field === "qrCodeImage") {
-          setCropperAspect(1) // Square for QR code
-        }
-
-        setCropperOpen(true)
-      }
-      reader.readAsDataURL(file)
+  const handleSaveProfile = async () => {
+    // Check if there are any changes
+    if (!hasChanges()) {
+      toast.error("No changes to save!")
+      return
     }
-  }
 
-  const handleCropComplete = (croppedImage) => {
-    handleInputChange(cropperField, croppedImage)
-    toast.success("Image cropped successfully")
-  }
-
-  const saveProfile = async () => {
-    if (!profileData.username.trim()) {
+    if (!formData.username.trim()) {
       toast.error("Username is required!")
       return
     }
@@ -325,103 +291,315 @@ const Dashboard = () => {
       return
     }
 
-    setLoading(true)
+    setSaving(true)
     const loadingToast = toast.loading("Saving profile...")
 
     try {
-      console.log("Saving profile data:", profileData)
-
       const response = await fetch("/api/user/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        // ✅ keep local state as the source of truth
+        setOriginalData({ ...formData })
+
+        toast.dismiss(loadingToast)
+        toast.success("Profile updated successfully!")
+        // ⚠️ don't call fetchProfile() here, only update on manual refresh
+      } else {
+        toast.dismiss(loadingToast)
+        toast.error(result.message || "Failed to update profile")
+      }
+    } catch (error) {
+      console.error("Error updating profile:", error)
+      toast.dismiss(loadingToast)
+      toast.error("Failed to update profile")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const verifyPayment = async (paymentId, action) => {
+    try {
+      const status = action === "approve" ? "completed" : "rejected"
+      const response = await fetch("/api/creator/verify-payment", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentId, status }),
+      })
+
+      if (response.ok) {
+        toast.success(`Payment ${action}d successfully!`)
+        await fetchPendingPayments()
+        await fetchStats()
+      } else {
+        const error = await response.json()
+        toast.error(error.message || `Failed to ${action} payment`)
+      }
+    } catch (error) {
+      console.error(`Error ${action}ing payment:`, error)
+      toast.error(`Failed to ${action} payment`)
+    }
+  }
+
+  const handlePasswordChange = async () => {
+    if (!passwordChangeData.currentPassword || !passwordChangeData.newPassword) {
+      toast.error("Please fill in all password fields")
+      return
+    }
+
+    if (passwordChangeData.newPassword !== passwordChangeData.confirmPassword) {
+      toast.error("New passwords don't match")
+      return
+    }
+
+    if (passwordChangeData.newPassword.length < 6) {
+      toast.error("New password must be at least 6 characters long")
+      return
+    }
+
+    try {
+      const response = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: user.id,
-          ...profileData,
+          currentPassword: passwordChangeData.currentPassword,
+          newPassword: passwordChangeData.newPassword,
+          otp: passwordChangeData.otp,
         }),
       })
 
       const result = await response.json()
-      console.log("Save response:", result)
 
       if (response.ok) {
-        // Update original data to reflect saved state
-        setOriginalData({ ...profileData })
-        setHasChanges(false)
+        if (result.otpSent) {
+          setOtpSent((prev) => ({ ...prev, password: true }))
+          toast.success("OTP sent to your email!")
 
-        // Dismiss loading toast and show success
-        toast.dismiss(loadingToast)
-        toast.success("Profile saved successfully!", {
-          description: "Your changes have been saved to the database.",
-        })
+          setResendTimeout((prev) => ({ ...prev, password: 60 }))
 
-        // Clear username status
-        setUsernameStatus("")
+          const interval = setInterval(() => {
+            setResendTimeout((prev) => {
+              const newTimeout = prev.password - 1
+              if (newTimeout <= 0) {
+                clearInterval(interval)
+                return { ...prev, password: 0 }
+              }
+              return { ...prev, password: newTimeout }
+            })
+          }, 1000)
+        } else {
+          toast.success("Password changed successfully!")
+          setPasswordChangeModal(false)
+          setPasswordChangeData({ currentPassword: "", newPassword: "", confirmPassword: "", otp: "" })
+          setOtpSent((prev) => ({ ...prev, password: false }))
+        }
       } else {
-        toast.dismiss(loadingToast)
-        toast.error("Failed to save profile", {
-          description: result.error || "An error occurred while saving",
-        })
+        toast.error(result.message)
       }
     } catch (error) {
-      console.error("Save error:", error)
-      toast.dismiss(loadingToast)
-      toast.error("Failed to save profile", {
-        description: "Network error occurred",
-      })
-    } finally {
-      setLoading(false)
+      console.error("Password change error:", error)
+      toast.error("Failed to change password")
     }
   }
 
+  const handleDeleteAccount = async () => {
+    if (!deleteAccountData.confirmDelete || deleteAccountData.confirmDelete !== "DELETE_MY_ACCOUNT") {
+      toast.error("Please type 'DELETE_MY_ACCOUNT' to confirm")
+      return
+    }
+
+    try {
+      const response = await fetch("/api/auth/delete-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          password: deleteAccountData.password,
+          otp: deleteAccountData.otp,
+          confirmDelete: deleteAccountData.confirmDelete,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        if (result.otpSent) {
+          setOtpSent((prev) => ({ ...prev, delete: true }))
+          toast.success("OTP sent to your email!")
+
+          setResendTimeout((prev) => ({ ...prev, delete: 60 }))
+
+          const interval = setInterval(() => {
+            setResendTimeout((prev) => {
+              const newTimeout = prev.delete - 1
+              if (newTimeout <= 0) {
+                clearInterval(interval)
+                return { ...prev, delete: 0 }
+              }
+              return { ...prev, delete: newTimeout }
+            })
+          }, 1000)
+        } else if (result.deleted) {
+          toast.success("Account deleted successfully!")
+          await signOut({ callbackUrl: "/" })
+        }
+      } else {
+        toast.error(result.message)
+      }
+    } catch (error) {
+      console.error("Account deletion error:", error)
+      toast.error("Failed to delete account")
+    }
+  }
+
+  const handleResendOTP = async (type) => {
+    if (resendTimeout[type] > 0) {
+      return
+    }
+
+    try {
+      let endpoint, data
+
+      if (type === "password") {
+        endpoint = "/api/auth/change-password"
+        data = {
+          currentPassword: passwordChangeData.currentPassword,
+          newPassword: passwordChangeData.newPassword,
+        }
+      } else if (type === "delete") {
+        endpoint = "/api/auth/delete-account"
+        data = {
+          password: deleteAccountData.password,
+          confirmDelete: deleteAccountData.confirmDelete,
+        }
+      }
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      })
+
+      const result = await response.json()
+
+      if (response.ok && result.otpSent) {
+        toast.success("New OTP sent to your email!")
+
+        setResendTimeout((prev) => ({ ...prev, [type]: 60 }))
+
+        const interval = setInterval(() => {
+          setResendTimeout((prev) => {
+            const newTimeout = prev[type] - 1
+            if (newTimeout <= 0) {
+              clearInterval(interval)
+              return { ...prev, [type]: 0 }
+            }
+            return { ...prev, [type]: newTimeout }
+          })
+        }, 1000)
+      } else {
+        toast.error(result.message || "Failed to resend OTP")
+      }
+    } catch (error) {
+      console.error("Resend OTP error:", error)
+      toast.error("Failed to resend OTP")
+    }
+  }
+
+  const calculateProfileCompletion = () => {
+    if (!formData) return 0
+
+    const fields = [
+      formData.name,
+      formData.username,
+      formData.bio,
+      formData.profileImage,
+      formData.upiId || formData.razorpayId,
+    ]
+
+    const completedFields = fields.filter((field) => field && field.trim() !== "").length
+    return Math.round((completedFields / fields.length) * 100)
+  }
+
   const copyProfileLink = () => {
-    if (!profileData.username) {
+    if (!formData.username) {
       toast.error("Please set a username first")
       return
     }
 
-    const profileUrl = `${window.location.origin}/${profileData.username}`
+    const profileUrl = `${window.location.origin}/${formData.username}`
     navigator.clipboard.writeText(profileUrl)
     toast.success("Profile link copied to clipboard!")
   }
 
   const resetChanges = () => {
-    setProfileData({ ...originalData })
-    setHasChanges(false)
+    setFormData({ ...originalData })
     setUsernameStatus("")
     toast.info("Changes reset to original values")
   }
 
-  if (authLoading) {
+  // Get authentication method display
+  const getAuthMethodDisplay = () => {
+    if (!user) return null
+
+    const provider = user.provider || "unknown"
+
+    switch (provider) {
+      case "github":
+        return {
+          icon: <Github className="h-4 w-4" />,
+          text: "GitHub Account Connected",
+          color: "bg-purple-600",
+        }
+      case "credentials":
+        return {
+          icon: <Shield className="h-4 w-4" />,
+          text: "Email & Password",
+          color: "bg-green-600",
+        }
+      default:
+        return {
+          icon: <User className="h-4 w-4" />,
+          text: "Standard Account",
+          color: "bg-gray-600",
+        }
+    }
+  }
+
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-gray-950 text-white font-outfit flex items-center justify-center">
         <div className="flex items-center gap-2">
           <Loader2 className="h-6 w-6 animate-spin" />
-          <span>Loading...</span>
+          <span>Loading dashboard...</span>
         </div>
       </div>
     )
   }
 
   if (!user) {
-    return null
-  }
-
-  if (dataLoading) {
     return (
-      <div className="min-h-screen bg-gray-950 text-white font-outfit flex items-center justify-center">
-        <div className="flex items-center gap-2">
-          <Loader2 className="h-6 w-6 animate-spin" />
-          <span>Loading your profile...</span>
-        </div>
+      <div className="min-h-screen bg-gray-950 text-white font-outfit flex flex-col items-center justify-center p-4">
+        <h1 className="text-2xl font-bold mb-4">Access Denied</h1>
+        <p className="text-gray-400 mb-6">Please sign in to access your dashboard.</p>
+        <Button asChild className="bg-orange-600 hover:bg-orange-700">
+          <Link href="/login">Sign In</Link>
+        </Button>
       </div>
     )
   }
 
+  const profileCompletion = calculateProfileCompletion()
+  const authMethod = getAuthMethodDisplay()
+  const changesDetected = hasChanges()
+
   return (
     <div className="min-h-screen bg-gray-950 text-white font-outfit">
-      <div className="px-4 py-6 md:px-6 md:py-8">
+      <div className="px-4 py-6 md:px-6 md:py-8 pb-6">
         <div className="max-w-6xl mx-auto">
           {/* Header */}
           <div className="mb-6 md:mb-8">
@@ -429,14 +607,35 @@ const Dashboard = () => {
               <div>
                 <h1 className="text-2xl md:text-3xl font-bold mb-1 md:mb-2">Dashboard</h1>
                 <p className="text-gray-400 text-sm md:text-base">Welcome back, {user.name?.split(" ")[0]}!</p>
+                {authMethod && (
+                  <Badge className={`mt-2 ${authMethod.color} text-white`}>
+                    {authMethod.icon}
+                    <span className="ml-1">{authMethod.text}</span>
+                  </Badge>
+                )}
               </div>
               <div className="flex items-center gap-3 md:gap-4">
+                <Button
+                  onClick={refreshDashboard}
+                  disabled={refreshing}
+                  variant="outline"
+                  className="border-gray-600 text-gray-300 bg-transparent hover:bg-gray-700"
+                >
+                  {refreshing ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                  )}
+                  Refresh
+                </Button>
                 <div className="text-right">
                   <p className="text-sm text-gray-300">{user.name}</p>
-                  <p className="text-xs text-gray-500">GitHub Account</p>
+                  <p className="text-xs text-gray-500">
+                    {user.provider === "github" ? "GitHub Account" : "Standard Account"}
+                  </p>
                 </div>
                 <img
-                  src={profileData.profileImage || user.image || "/placeholder.svg?height=48&width=48"}
+                  src={formData.profileImage || user.image || "/placeholder.svg?height=48&width=48"}
                   alt={user.name}
                   className="w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-gray-600"
                 />
@@ -444,6 +643,70 @@ const Dashboard = () => {
             </div>
           </div>
 
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-6 md:mb-8">
+            <Card className="bg-gray-800 border-gray-600">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-medium text-gray-300">Total Supporters</CardTitle>
+                  <Users className="h-4 w-4 text-blue-400" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-white">{stats?.totalSupporters || 0}</div>
+                <p className="text-xs text-gray-400">
+                  {(stats?.totalSupporters || 0) === 0 ? "Complete profile to start" : "People supporting you"}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gray-800 border-gray-600">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-medium text-gray-300">Total Earned</CardTitle>
+                  <DollarSign className="h-4 w-4 text-green-400" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-white">₹{stats?.totalEarnings || 0}</div>
+                <p className="text-xs text-gray-400">
+                  {(stats?.totalEarnings || 0) === 0 ? "Set up payments to start" : "Total earnings"}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gray-800 border-gray-600">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-medium text-gray-300">This Month</CardTitle>
+                  <TrendingUp className="h-4 w-4 text-purple-400" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-white">₹{stats?.monthlyEarnings || 0}</div>
+                <p className="text-xs text-gray-400">
+                  {(stats?.monthlyEarnings || 0) === 0 ? "No earnings this month" : "Current month earnings"}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gray-800 border-gray-600">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-medium text-gray-300">Pending Verification</CardTitle>
+                  <Heart className="h-4 w-4 text-yellow-400" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-white">{pendingPayments.length}</div>
+                <p className="text-xs text-gray-400">
+                  {pendingPayments.length === 0 ? "No pending payments" : "Awaiting verification"}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Main Tabs */}
           <Tabs defaultValue="overview" className="space-y-4 md:space-y-6">
             <TabsList className="bg-gray-800 border-gray-600 flex flex-wrap justify-start overflow-x-auto">
               <TabsTrigger
@@ -465,28 +728,42 @@ const Dashboard = () => {
                 Payment Setup
               </TabsTrigger>
               <TabsTrigger
-                value="verification"
+                value="pending"
                 className="text-gray-500 data-[state=active]:bg-gray-700 data-[state=active]:text-white flex-shrink-0"
               >
                 Payment Verification
-                {supporterStats.pendingVerification > 0 && (
+                {pendingPayments.length > 0 && (
                   <span className="ml-2 bg-yellow-500 text-black text-xs px-2 py-0.5 rounded-full">
-                    {supporterStats.pendingVerification}
+                    {pendingPayments.length}
                   </span>
                 )}
+              </TabsTrigger>
+              <TabsTrigger
+                value="security"
+                className="text-gray-500 data-[state=active]:bg-gray-700 data-[state=active]:text-white flex-shrink-0"
+              >
+                Security
+              </TabsTrigger>
+              <TabsTrigger
+                value="logs"
+                className="text-gray-500 data-[state=active]:bg-gray-700 data-[state=active]:text-white flex-shrink-0"
+              >
+                Payment Logs
               </TabsTrigger>
             </TabsList>
 
             {/* Overview Tab */}
             <TabsContent value="overview" className="space-y-4 md:space-y-6">
-              {/* GitHub Account Info */}
+              {/* Account Info */}
               <Card className="bg-gray-800 border-gray-600">
                 <CardHeader>
                   <CardTitle className="text-white flex items-center gap-2">
-                    GitHub Account
+                    {user.provider === "github" ? "GitHub Account" : "Account Information"}
                     <CheckCircle className="h-4 w-4 text-green-400" />
                   </CardTitle>
-                  <CardDescription className="text-gray-300">Connected via OAuth</CardDescription>
+                  <CardDescription className="text-gray-300">
+                    {user.provider === "github" ? "Connected via OAuth" : "Standard account"}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
@@ -504,168 +781,6 @@ const Dashboard = () => {
                 </CardContent>
               </Card>
 
-              
-
-              {/* Current Profile Display */}
-              <Card className="bg-gray-800 border-gray-600">
-                <CardHeader>
-                  <CardTitle className="text-white flex items-center gap-2">
-                    Creator Profile
-                    <Edit className="h-4 w-4 text-gray-400" />
-                  </CardTitle>
-                  <CardDescription className="text-gray-300">Your public creator profile information</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {/* Current Banner */}
-                  {profileData.bannerImage && (
-                    <div className="space-y-2">
-                      <Label className="text-gray-300">Banner Image</Label>
-                      <div className="w-full h-32 bg-gray-700 rounded-lg overflow-hidden">
-                        <img
-                          src={profileData.bannerImage || "/placeholder.svg"}
-                          alt="Current Banner"
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Current Profile Info Grid */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-4">
-                        {profileData.profileImage ? (
-                          <img
-                            src={profileData.profileImage || "/placeholder.svg"}
-                            alt="Current Profile"
-                            className="w-16 h-16 rounded-full border-2 border-gray-600"
-                          />
-                        ) : (
-                          <div className="w-16 h-16 rounded-full border-2 border-gray-600 bg-gray-700 flex items-center justify-center">
-                            <User className="h-8 w-8 text-gray-400" />
-                          </div>
-                        )}
-                        <div>
-                          <h3 className="text-lg font-semibold text-white">
-                            {profileData.name || "No display name set"}
-                          </h3>
-                          <p className="text-gray-400">
-                            {profileData.username ? `@${profileData.username}` : "No username set"}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label className="text-gray-300">Email</Label>
-                        <p className="text-gray-400 text-sm">{profileData.email || "No email set"}</p>
-                      </div>
-                    </div>
-
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label className="text-gray-300">Bio</Label>
-                        <p className="text-gray-400 text-sm">{profileData.bio || "No bio added yet"}</p>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label className="text-gray-300">Payment Setup</Label>
-                        <div className="space-y-2">
-                          {profileData.razorpayId ? (
-                            <div className="flex items-center gap-2 text-green-400">
-                              <CheckCircle className="h-4 w-4" />
-                              <span className="text-sm">Razorpay configured</span>
-                              <span className="text-xs text-gray-500">
-                                ({profileData.razorpayId.substring(0, 12)}...)
-                              </span>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-2 text-yellow-400">
-                              <AlertCircle className="h-4 w-4" />
-                              <span className="text-sm">Razorpay setup required</span>
-                            </div>
-                          )}
-
-                          {profileData.qrCodeImage || profileData.upiId ? (
-                            <div className="flex items-center gap-2 text-green-400">
-                              <CheckCircle className="h-4 w-4" />
-                              <span className="text-sm">Personal payment details added</span>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-2 text-gray-400">
-                              <QrCode className="h-4 w-4" />
-                              <span className="text-sm">Personal payment details optional</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Stats Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-                <Card className="bg-gray-800 border-gray-600">
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-sm font-medium text-gray-300">Total Supporters</CardTitle>
-                      <Users className="h-4 w-4 text-blue-400" />
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold text-white">{supporterStats.totalSupporters}</div>
-                    <p className="text-xs text-gray-400">
-                      {supporterStats.totalSupporters === 0 ? "Complete profile to start" : "People supporting you"}
-                    </p>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-gray-800 border-gray-600">
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-sm font-medium text-gray-300">Total Earned</CardTitle>
-                      <DollarSign className="h-4 w-4 text-green-400" />
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold text-white">₹{supporterStats.totalEarned}</div>
-                    <p className="text-xs text-gray-400">
-                      {supporterStats.totalEarned === 0 ? "Set up payments to start" : "Total earnings"}
-                    </p>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-gray-800 border-gray-600">
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-sm font-medium text-gray-300">This Month</CardTitle>
-                      <TrendingUp className="h-4 w-4 text-purple-400" />
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold text-white">₹{supporterStats.thisMonth}</div>
-                    <p className="text-xs text-gray-400">
-                      {supporterStats.thisMonth === 0 ? "No earnings this month" : "Current month earnings"}
-                    </p>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-gray-800 border-gray-600">
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-sm font-medium text-gray-300">Pending Verification</CardTitle>
-                      <Heart className="h-4 w-4 text-yellow-400" />
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold text-white">{supporterStats.pendingVerification}</div>
-                    <p className="text-xs text-gray-400">
-                      {supporterStats.pendingVerification === 0 ? "No pending payments" : "Awaiting verification"}
-                    </p>
-                  </CardContent>
-                </Card>
-              </div>
-
               {/* Quick Actions */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
                 <Card className="bg-gray-800 border-gray-600">
@@ -676,13 +791,13 @@ const Dashboard = () => {
                   <CardContent className="space-y-4">
                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                       <Input
-                        value={profileData.username ? `fuelmywork.com/${profileData.username}` : "Set username first"}
+                        value={formData.username ? `fuelmywork.com/${formData.username}` : "Set username first"}
                         readOnly
                         className="bg-gray-700 border-gray-600 text-gray-300 flex-grow"
                       />
                       <Button
                         onClick={copyProfileLink}
-                        disabled={!profileData.username}
+                        disabled={!formData.username}
                         variant="outline"
                         className="border-gray-600 text-gray-300 bg-transparent hover:bg-gray-700 hover:text-gray-200 w-full sm:w-auto"
                       >
@@ -691,8 +806,8 @@ const Dashboard = () => {
                     </div>
                     <div className="flex gap-2">
                       <Button
-                        onClick={() => window.open(`/${profileData.username}`, "_blank")}
-                        disabled={!profileData.username}
+                        onClick={() => window.open(`/${formData.username}`, "_blank")}
+                        disabled={!formData.username}
                         className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto"
                       >
                         <Eye className="h-4 w-4 mr-2" />
@@ -713,26 +828,13 @@ const Dashboard = () => {
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-300">Profile completion</span>
-                        <span className="text-gray-300">
-                          {Math.round(
-                            (Object.values(profileData).filter((val) => val && val.trim()).length /
-                              Object.keys(profileData).length) *
-                              100,
-                          )}
-                          %
-                        </span>
+                        <span className="text-gray-300">{profileCompletion}%</span>
                       </div>
                       <div className="w-full bg-gray-700 rounded-full h-2">
                         <div
                           className="bg-blue-600 h-2 rounded-full transition-all"
-                          style={{
-                            width: `${Math.round(
-                              (Object.values(profileData).filter((val) => val && val.trim()).length /
-                                Object.keys(profileData).length) *
-                                100,
-                            )}%`,
-                          }}
-                        ></div>
+                          style={{ width: `${profileCompletion}%` }}
+                        />
                       </div>
                     </div>
                   </CardContent>
@@ -745,81 +847,37 @@ const Dashboard = () => {
               <Card className="bg-gray-800 border-gray-600">
                 <CardHeader>
                   <CardTitle className="text-white">Edit Profile Information</CardTitle>
-                  <CardDescription className="text-gray-300">
-                    Update your public creator profile (linked to your GitHub account)
-                  </CardDescription>
+                  <CardDescription className="text-gray-300">Update your public creator profile</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   {/* Banner Image */}
-                  <div className="space-y-2">
-                    <Label className="text-gray-300">Banner Image</Label>
-                    <div className="relative">
-                      <div className="w-full h-32 bg-gray-700 rounded-lg overflow-hidden">
-                        {profileData.bannerImage ? (
-                          <img
-                            src={profileData.bannerImage || "/placeholder.svg"}
-                            alt="Banner"
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-gray-400">
-                            <Upload className="h-8 w-8" />
-                          </div>
-                        )}
-                      </div>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => handleImageUpload("bannerImage", e)}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                      />
-                      <div className="absolute top-2 right-2 bg-gray-900/80 rounded-full p-2">
-                        <Crop className="h-4 w-4 text-white" />
-                      </div>
-                    </div>
-                    <p className="text-xs text-gray-400">
-                      Click to upload and crop banner image (16:9 ratio recommended)
-                    </p>
-                  </div>
+                  <ImageUpload
+                    currentImage={formData.bannerImage}
+                    onImageUpdate={(imageUrl) => handleInputChange("bannerImage", imageUrl)}
+                    aspect={16 / 9}
+                    circularCrop={false}
+                    title="Banner Image"
+                    description="Click to upload and crop banner image (16:9 ratio recommended)"
+                    size="banner"
+                  />
 
                   {/* Profile Image */}
-                  <div className="space-y-2">
-                    <Label className="text-gray-300">Profile Image</Label>
-                    <div className="relative w-24 h-24">
-                      <div className="w-full h-full bg-gray-700 rounded-full overflow-hidden">
-                        {profileData.profileImage ? (
-                          <img
-                            src={profileData.profileImage || "/placeholder.svg"}
-                            alt="Profile"
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-gray-400">
-                            <User className="h-8 w-8" />
-                          </div>
-                        )}
-                      </div>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => handleImageUpload("profileImage", e)}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                      />
-                      <div className="absolute -top-1 -right-1 bg-gray-900/80 rounded-full p-1">
-                        <Crop className="h-3 w-3 text-white" />
-                      </div>
-                    </div>
-                    <p className="text-xs text-gray-400">
-                      Click to upload and crop profile image (square ratio recommended)
-                    </p>
-                  </div>
+                  <ImageUpload
+                    currentImage={formData.profileImage}
+                    onImageUpdate={(imageUrl) => handleInputChange("profileImage", imageUrl)}
+                    aspect={1}
+                    circularCrop={true}
+                    title="Profile Image"
+                    description="Click to upload and crop profile image (square ratio recommended)"
+                    size="medium"
+                  />
 
                   {/* Username */}
                   <div className="space-y-2">
                     <Label className="text-gray-300">Username *</Label>
                     <div className="relative">
                       <Input
-                        value={profileData.username}
+                        value={formData.username}
                         onChange={(e) => handleUsernameChange(e.target.value)}
                         placeholder="your-unique-username"
                         className="bg-gray-700 border-gray-600 text-white"
@@ -845,7 +903,7 @@ const Dashboard = () => {
                       </p>
                     )}
                     <p className="text-xs text-gray-400">
-                      This will be your unique URL: fuelmywork.com/{profileData.username || "username"}
+                      This will be your unique URL: fuelmywork.com/{formData.username || "username"}
                     </p>
                   </div>
 
@@ -853,36 +911,53 @@ const Dashboard = () => {
                   <div className="space-y-2">
                     <Label className="text-gray-300">Display Name</Label>
                     <Input
-                      value={profileData.name}
+                      value={formData.name}
                       onChange={(e) => handleInputChange("name", e.target.value)}
                       placeholder={user.name || "Your display name"}
                       className="bg-gray-700 border-gray-600 text-white"
                     />
-                    <p className="text-xs text-gray-400">Defaults to your GitHub name: {user.name}</p>
-                  </div>
-
-                  {/* Email */}
-                  <div className="space-y-2">
-                    <Label className="text-gray-300">Email</Label>
-                    <Input
-                      type="email"
-                      value={profileData.email}
-                      onChange={(e) => handleInputChange("email", e.target.value)}
-                      placeholder={user.email || "your@email.com"}
-                      className="bg-gray-700 border-gray-600 text-white"
-                    />
-                    <p className="text-xs text-gray-400">Defaults to your GitHub email: {user.email}</p>
+                    <p className="text-xs text-gray-400">Defaults to your account name: {user.name}</p>
                   </div>
 
                   {/* Bio */}
                   <div className="space-y-2">
                     <Label className="text-gray-300">Bio</Label>
                     <Textarea
-                      value={profileData.bio}
+                      value={formData.bio}
                       onChange={(e) => handleInputChange("bio", e.target.value)}
                       placeholder="Tell your supporters about yourself..."
                       className="bg-gray-700 border-gray-600 text-white min-h-[100px]"
                     />
+                  </div>
+
+                  {/* Save buttons for Profile Settings */}
+                  <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-gray-700">
+                    <Button
+                      onClick={resetChanges}
+                      variant="outline"
+                      className="border-gray-600 bg-gray-700/50 text-gray-300 hover:bg-gray-600 w-full sm:w-auto"
+                      size="sm"
+                    >
+                      Reset Changes
+                    </Button>
+                    <Button
+                      onClick={handleSaveProfile}
+                      disabled={saving}
+                      className="bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto min-w-[120px]"
+                      size="sm"
+                    >
+                      {saving ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4 mr-2" />
+                          Save Profile
+                        </>
+                      )}
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -918,13 +993,13 @@ const Dashboard = () => {
                   </div>
 
                   {/* Current Status */}
-                  {profileData.razorpayId && (
+                  {formData.razorpayId && (
                     <div className="bg-green-900/20 border border-green-700 rounded-lg p-4">
                       <div className="flex items-center gap-2 text-green-400 mb-2">
                         <CheckCircle className="h-4 w-4" />
                         <span className="font-semibold">Razorpay Configured</span>
                       </div>
-                      <p className="text-green-300 text-sm">Key ID: {profileData.razorpayId.substring(0, 12)}...</p>
+                      <p className="text-green-300 text-sm">Key ID: {formData.razorpayId.substring(0, 12)}...</p>
                     </div>
                   )}
 
@@ -932,7 +1007,7 @@ const Dashboard = () => {
                   <div className="space-y-2">
                     <Label className="text-gray-300">Razorpay Key ID</Label>
                     <Input
-                      value={profileData.razorpayId}
+                      value={formData.razorpayId}
                       onChange={(e) => handleInputChange("razorpayId", e.target.value)}
                       placeholder="rzp_test_xxxxxxxxxx"
                       className="bg-gray-700 border-gray-600 text-white"
@@ -944,7 +1019,7 @@ const Dashboard = () => {
                     <Label className="text-gray-300">Razorpay Key Secret</Label>
                     <Input
                       type="password"
-                      value={profileData.razorpaySecret}
+                      value={formData.razorpaySecret}
                       onChange={(e) => handleInputChange("razorpaySecret", e.target.value)}
                       placeholder="xxxxxxxxxxxxxxxxxx"
                       className="bg-gray-700 border-gray-600 text-white"
@@ -981,7 +1056,7 @@ const Dashboard = () => {
                   <div className="space-y-2">
                     <Label className="text-gray-300">UPI ID</Label>
                     <Input
-                      value={profileData.upiId}
+                      value={formData.upiId}
                       onChange={(e) => handleInputChange("upiId", e.target.value)}
                       placeholder="yourname@paytm / yourname@phonepe / yourname@gpay"
                       className="bg-gray-700 border-gray-600 text-white"
@@ -992,56 +1067,65 @@ const Dashboard = () => {
                   </div>
 
                   {/* QR Code Image */}
-                  <div className="space-y-2">
-                    <Label className="text-gray-300">Payment QR Code</Label>
-                    <div className="relative w-48 h-48">
-                      <div className="w-full h-full bg-gray-700 rounded-lg overflow-hidden">
-                        {profileData.qrCodeImage ? (
-                          <img
-                            src={profileData.qrCodeImage || "/placeholder.svg"}
-                            alt="QR Code"
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-gray-400">
-                            <QrCode className="h-16 w-16" />
-                          </div>
-                        )}
-                      </div>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => handleImageUpload("qrCodeImage", e)}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                      />
-                      <div className="absolute top-2 right-2 bg-gray-900/80 rounded-full p-2">
-                        <Crop className="h-4 w-4 text-white" />
-                      </div>
-                    </div>
-                    <p className="text-xs text-gray-400">
-                      Upload your payment QR code (will be cropped to square format)
-                    </p>
-                  </div>
+                  <ImageUpload
+                    currentImage={formData.qrCodeImage}
+                    onImageUpdate={(imageUrl) => handleInputChange("qrCodeImage", imageUrl)}
+                    aspect={1}
+                    circularCrop={false}
+                    title="Payment QR Code"
+                    description="Upload your payment QR code (will be cropped to square format)"
+                    size="large"
+                  />
 
                   {/* Current Status */}
-                  {(profileData.qrCodeImage || profileData.upiId) && (
+                  {(formData.qrCodeImage || formData.upiId) && (
                     <div className="bg-green-900/20 border border-green-700 rounded-lg p-4">
                       <div className="flex items-center gap-2 text-green-400 mb-2">
                         <CheckCircle className="h-4 w-4" />
                         <span className="font-semibold">Personal Payment Details Added</span>
                       </div>
                       <div className="text-green-300 text-sm space-y-1">
-                        {profileData.upiId && <p>UPI ID: {profileData.upiId}</p>}
-                        {profileData.qrCodeImage && <p>QR Code: Uploaded</p>}
+                        {formData.upiId && <p>UPI ID: {formData.upiId}</p>}
+                        {formData.qrCodeImage && <p>QR Code: Uploaded</p>}
                       </div>
                     </div>
                   )}
+
+                  {/* Save buttons for Payment Setup */}
+                  <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-gray-700">
+                    <Button
+                      onClick={resetChanges}
+                      variant="outline"
+                      className="border-gray-600 bg-gray-700/50 text-gray-300 hover:bg-gray-600 w-full sm:w-auto"
+                      size="sm"
+                    >
+                      Reset Changes
+                    </Button>
+                    <Button
+                      onClick={handleSaveProfile}
+                      disabled={saving}
+                      className="bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto min-w-[120px]"
+                      size="sm"
+                    >
+                      {saving ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4 mr-2" />
+                          Save Payment Settings
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
 
             {/* Payment Verification Tab */}
-            <TabsContent value="verification" className="space-y-4 md:space-y-6">
+            <TabsContent value="pending" className="space-y-4 md:space-y-6">
               <Card className="bg-gray-800 border-gray-600">
                 <CardHeader>
                   <CardTitle className="text-white flex items-center gap-2">
@@ -1061,15 +1145,15 @@ const Dashboard = () => {
                             <div className="space-y-2">
                               <div className="flex items-center gap-2">
                                 <User className="h-4 w-4 text-gray-400" />
-                                <span className="font-semibold text-white">{payment.name}</span>
+                                <span className="font-semibold text-white">{payment.supporterName}</span>
                                 <span className="text-green-400 font-bold">₹{payment.amount}</span>
                               </div>
 
-                              {payment.paymentId && (
+                              {payment.transactionId && (
                                 <div className="flex items-center gap-2 text-sm">
-                                  <span className="text-gray-400">Payment ID:</span>
+                                  <span className="text-gray-400">Transaction ID:</span>
                                   <span className="text-gray-300 font-mono bg-gray-700 px-2 py-1 rounded">
-                                    {payment.paymentId}
+                                    {payment.transactionId}
                                   </span>
                                 </div>
                               )}
@@ -1083,7 +1167,7 @@ const Dashboard = () => {
 
                               <div className="text-xs text-gray-500">
                                 Submitted on{" "}
-                                {new Date(payment.createdAt).toLocaleDateString("en-IN", {
+                                {new Date(payment.createdAt || Date.now()).toLocaleDateString("en-IN", {
                                   year: "numeric",
                                   month: "long",
                                   day: "numeric",
@@ -1095,29 +1179,20 @@ const Dashboard = () => {
 
                             <div className="flex gap-2">
                               <Button
-                                onClick={() => verifyPayment(payment._id, false)}
-                                disabled={verifyingPayment === payment._id}
+                                onClick={() => verifyPayment(payment._id, "reject")}
                                 variant="outline"
                                 size="sm"
                                 className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white"
                               >
-                                {verifyingPayment === payment._id ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  "Reject"
-                                )}
+                                Reject
                               </Button>
                               <Button
-                                onClick={() => verifyPayment(payment._id, true)}
-                                disabled={verifyingPayment === payment._id}
+                                onClick={() => verifyPayment(payment._id, "approve")}
                                 size="sm"
                                 className="bg-green-600 hover:bg-green-700"
                               >
-                                {verifyingPayment === payment._id ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  "Verify"
-                                )}
+                                <CheckCircle className="h-4 w-4 mr-1" />
+                                Approve
                               </Button>
                             </div>
                           </div>
@@ -1134,74 +1209,411 @@ const Dashboard = () => {
                 </CardContent>
               </Card>
             </TabsContent>
+
+            {/* Security Tab */}
+            <TabsContent value="security" className="space-y-4 md:space-y-6">
+              <Card className="bg-gray-800 border-gray-600">
+                <CardHeader>
+                  <CardTitle className="text-white flex items-center gap-2">
+                    <Shield className="h-5 w-5 text-blue-400" />
+                    Account Security
+                  </CardTitle>
+                  <CardDescription className="text-gray-300">
+                    Manage your account security settings and sensitive actions
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* Password Change */}
+                  {user.provider === "credentials" && (
+                    <div className="border border-gray-700 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
+                          <h4 className="text-white font-semibold flex items-center gap-2">
+                            <Key className="h-4 w-4 text-green-400" />
+                            Change Password
+                          </h4>
+                          <p className="text-gray-400 text-sm">Update your account password with email verification</p>
+                        </div>
+                        <Button
+                          onClick={() => setPasswordChangeModal(true)}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          Change Password
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Account Deletion */}
+                  <div className="border border-red-700 rounded-lg p-4 bg-red-900/10">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h4 className="text-white font-semibold flex items-center gap-2">
+                          <Trash2 className="h-4 w-4 text-red-400" />
+                          Delete Account
+                        </h4>
+                        <p className="text-gray-400 text-sm">Permanently delete your account and all associated data</p>
+                      </div>
+                      <Button
+                        onClick={() => setDeleteAccountModal(true)}
+                        variant="outline"
+                        className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white"
+                      >
+                        Delete Account
+                      </Button>
+                    </div>
+                    <div className="bg-red-900/20 border border-red-700 rounded p-3">
+                      <p className="text-red-300 text-sm">
+                        ⚠️ <strong>Warning:</strong> This action cannot be undone. All your data, including profile,
+                        payments, and supporter information will be permanently deleted.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* OAuth Account Info */}
+                  {user.provider === "github" && (
+                    <div className="border border-gray-700 rounded-lg p-4">
+                      <div className="flex items-center gap-3 mb-3">
+                        <Github className="h-5 w-5 text-purple-400" />
+                        <div>
+                          <h4 className="text-white font-semibold">GitHub Account</h4>
+                          <p className="text-gray-400 text-sm">Your account is connected via GitHub OAuth</p>
+                        </div>
+                      </div>
+                      <div className="bg-blue-900/20 border border-blue-700 rounded p-3">
+                        <p className="text-blue-300 text-sm">
+                          💡 <strong>Note:</strong> Password changes are managed through GitHub. To change your
+                          password, please visit your GitHub account settings.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent
+              value="logs"
+              className="space-y-4 md:space-y-6"
+              style={{ maxHeight: "60vh", overflowY: "auto" }}
+            >
+              <Card className="bg-gray-800 border-gray-600">
+                <CardHeader>
+                  <CardTitle className="text-white flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-blue-400" />
+                    Payment Activity Logs
+                  </CardTitle>
+                  <CardDescription className="text-gray-300">
+                    Complete history of all payment activities and status changes
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {loadingLogs ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-8 w-8 animate-spin text-blue-400" />
+                      <span className="ml-2 text-gray-400">Loading payment logs...</span>
+                    </div>
+                  ) : paymentLogs.length > 0 ? (
+                    <div className="space-y-4">
+                      {paymentLogs.map((log) => (
+                        <div key={log._id} className="border border-gray-700 rounded-lg p-4 space-y-3">
+                          <div className="flex items-start justify-between">
+                            <div className="space-y-2 flex-1">
+                              <div className="flex items-center gap-3">
+                                <span className={`font-semibold ${log.actionColor}`}>{log.action}</span>
+                                <span className="text-gray-400">•</span>
+                                <span className="text-white font-medium">{log.supporterName}</span>
+                                <span className="text-green-400 font-bold">₹{log.amount}</span>
+                              </div>
+
+                              {log.transactionId && (
+                                <div className="flex items-center gap-2 text-sm">
+                                  <span className="text-gray-400">Transaction ID:</span>
+                                  <span className="text-gray-300 font-mono bg-gray-700 px-2 py-1 rounded text-xs">
+                                    {log.transactionId}
+                                  </span>
+                                </div>
+                              )}
+
+                              {log.message && (
+                                <div className="text-sm">
+                                  <span className="text-gray-400">Message:</span>
+                                  <p className="text-gray-300 italic mt-1">"{log.message}"</p>
+                                </div>
+                              )}
+
+                              <div className="flex items-center gap-4 text-xs text-gray-500">
+                                <div>
+                                  <span className="text-gray-400">Received:</span>{" "}
+                                  {new Date(log.createdAt || Date.now()).toLocaleDateString("en-IN", {
+                                    year: "numeric",
+                                    month: "short",
+                                    day: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </div>
+                                {log.updatedAt && log.updatedAt !== log.createdAt && (
+                                  <div>
+                                    <span className="text-gray-400">Updated:</span>{" "}
+                                    {new Date(log.updatedAt).toLocaleDateString("en-IN", {
+                                      year: "numeric",
+                                      month: "short",
+                                      day: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              {log.paymentMethod && (
+                                <span className="text-xs bg-gray-700 text-gray-300 px-2 py-1 rounded">
+                                  {log.paymentMethod === "direct" ? "Direct/UPI" : log.paymentMethod}
+                                </span>
+                              )}
+                              <div
+                                className={`w-3 h-3 rounded-full ${
+                                  log.status === "completed"
+                                    ? "bg-green-400"
+                                    : log.status === "rejected"
+                                      ? "bg-red-400"
+                                      : "bg-yellow-400"
+                                }`}
+                                title={log.status}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                      <p className="text-gray-400 mb-2">No payment activity yet</p>
+                      <p className="text-sm text-gray-500">
+                        Payment logs will appear here once you start receiving payments
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
           </Tabs>
         </div>
       </div>
 
-      {/* Fixed Save Changes Bar - Only show when there are changes */}
-      {hasChanges && (
-        <div className="fixed bottom-0 left-0 right-0 bg-gray-800/95 backdrop-blur-sm border-t border-gray-600 p-4 z-50">
-          <div className="max-w-6xl mx-auto">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
-                <div className="text-sm text-yellow-400 font-medium">You have unsaved changes</div>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+      {/* Modals */}
+      <Dialog open={passwordChangeModal} onOpenChange={setPasswordChangeModal}>
+        <DialogContent className="bg-gray-800 border-gray-600 text-white">
+          <DialogHeader>
+            <DialogTitle>Change Password</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Current Password */}
+            <div className="space-y-2">
+              <Label className="text-gray-300">Current Password</Label>
+              <div className="relative">
+                <Input
+                  type={passwordVisibility.currentPassword ? "text" : "password"}
+                  value={passwordChangeData.currentPassword}
+                  onChange={(e) => setPasswordChangeData((prev) => ({ ...prev, currentPassword: e.target.value }))}
+                  className="bg-gray-700 border-gray-600 text-white pr-10"
+                />
                 <Button
-                  onClick={resetChanges}
-                  variant="outline"
-                  className="border-gray-600 bg-gray-700/50 text-gray-300 hover:bg-gray-600 w-full sm:w-auto"
+                  type="button"
+                  variant="ghost"
                   size="sm"
+                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                  onClick={() => setPasswordVisibility((prev) => ({ ...prev, currentPassword: !prev.currentPassword }))}
                 >
-                  Reset Changes
-                </Button>
-                <Button
-                  onClick={saveProfile}
-                  disabled={loading}
-                  className="bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto min-w-[120px]"
-                  size="sm"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                      Saving...
-                    </>
+                  {passwordVisibility.currentPassword ? (
+                    <EyeOff className="h-4 w-4 text-gray-400" />
                   ) : (
-                    <>
-                      <Save className="h-4 w-4 mr-2" />
-                      Save Changes
-                    </>
+                    <Eye className="h-4 w-4 text-gray-400" />
                   )}
                 </Button>
               </div>
             </div>
+
+            {/* New Password */}
+            <div className="space-y-2">
+              <Label className="text-gray-300">New Password</Label>
+              <div className="relative">
+                <Input
+                  type={passwordVisibility.newPassword ? "text" : "password"}
+                  value={passwordChangeData.newPassword}
+                  onChange={(e) => setPasswordChangeData((prev) => ({ ...prev, newPassword: e.target.value }))}
+                  className="bg-gray-700 border-gray-600 text-white pr-10"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                  onClick={() => setPasswordVisibility((prev) => ({ ...prev, newPassword: !prev.newPassword }))}
+                >
+                  {passwordVisibility.newPassword ? (
+                    <EyeOff className="h-4 w-4 text-gray-400" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-gray-400" />
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* Confirm New Password */}
+            <div className="space-y-2">
+              <Label className="text-gray-300">Confirm New Password</Label>
+              <div className="relative">
+                <Input
+                  type={passwordVisibility.confirmPassword ? "text" : "password"}
+                  value={passwordChangeData.confirmPassword}
+                  onChange={(e) => setPasswordChangeData((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                  className="bg-gray-700 border-gray-600 text-white pr-10"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                  onClick={() => setPasswordVisibility((prev) => ({ ...prev, confirmPassword: !prev.confirmPassword }))}
+                >
+                  {passwordVisibility.confirmPassword ? (
+                    <EyeOff className="h-4 w-4 text-gray-400" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-gray-400" />
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* OTP Verification */}
+            {otpSent.password && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-gray-300">OTP (Sent to your email)</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleResendOTP("password")}
+                    className="text-blue-400 hover:text-blue-300 hover:bg-transparent bg-transparent p-0 h-auto disabled:opacity-50"
+                    disabled={resendTimeout.password > 0}
+                  >
+                    {resendTimeout.password > 0 ? `Resend OTP (${resendTimeout.password}s)` : "Resend OTP"}
+                  </Button>
+                </div>
+                <Input
+                  type="text"
+                  value={passwordChangeData.otp}
+                  onChange={(e) => setPasswordChangeData((prev) => ({ ...prev, otp: e.target.value }))}
+                  className="bg-gray-700 border-gray-600 text-white"
+                />
+              </div>
+            )}
           </div>
-        </div>
-      )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPasswordChangeModal(false)}
+              className="border-red-600 bg-white text-red-600 hover:bg-red-600 hover:text-white"
+            >
+              Cancel
+            </Button>
+            <Button onClick={handlePasswordChange} className="bg-green-600 hover:bg-green-700">
+              {otpSent.password ? "Change Password" : "Send OTP"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      {/* Image Cropper Modal */}
-      <ImageCropper
-        isOpen={cropperOpen}
-        onClose={() => setCropperOpen(false)}
-        imageSrc={cropperImage}
-        onCropComplete={handleCropComplete}
-        aspectRatio={cropperAspect}
-        title={
-          cropperField === "profileImage"
-            ? "Crop Profile Picture"
-            : cropperField === "bannerImage"
-              ? "Crop Banner Image"
-              : cropperField === "qrCodeImage"
-                ? "Crop QR Code"
-                : "Crop Image"
-        }
-      />
+      <Dialog open={deleteAccountModal} onOpenChange={setDeleteAccountModal}>
+        <DialogContent className="bg-gray-800 border-red-600 text-white">
+          <DialogHeader>
+            <DialogTitle>Delete Account</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Password */}
+            <div className="space-y-2">
+              <Label className="text-gray-300">Password</Label>
+              <div className="relative">
+                <Input
+                  type={passwordVisibility.deletePassword ? "text" : "password"}
+                  value={deleteAccountData.password}
+                  onChange={(e) => setDeleteAccountData((prev) => ({ ...prev, password: e.target.value }))}
+                  className="bg-gray-700 border-gray-600 text-white pr-10"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                  onClick={() => setPasswordVisibility((prev) => ({ ...prev, deletePassword: !prev.deletePassword }))}
+                >
+                  {passwordVisibility.deletePassword ? (
+                    <EyeOff className="h-4 w-4 text-gray-400" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-gray-400" />
+                  )}
+                </Button>
+              </div>
+            </div>
 
-      {/* Add bottom padding when save bar is visible */}
-      {hasChanges && <div className="h-20"></div>}
+            {/* OTP Verification */}
+            {otpSent.delete && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-gray-300">OTP (Sent to your email)</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleResendOTP("delete")}
+                    className="text-blue-400 hover:text-blue-300 hover:bg-transparent bg-transparent p-0 h-auto disabled:opacity-50"
+                    disabled={resendTimeout.delete > 0}
+                  >
+                    {resendTimeout.delete > 0 ? `Resend OTP (${resendTimeout.delete}s)` : "Resend OTP"}
+                  </Button>
+                </div>
+                <Input
+                  type="text"
+                  value={deleteAccountData.otp}
+                  onChange={(e) => setDeleteAccountData((prev) => ({ ...prev, otp: e.target.value }))}
+                  className="bg-gray-700 border-gray-600 text-white"
+                />
+              </div>
+            )}
+
+            {/* Confirm Delete */}
+            <div className="space-y-2">
+              <Label className="text-red-400">Confirm Deletion (Type DELETE_MY_ACCOUNT)</Label>
+              <Input
+                type="text"
+                value={deleteAccountData.confirmDelete}
+                onChange={(e) => setDeleteAccountData((prev) => ({ ...prev, confirmDelete: e.target.value }))}
+                className="bg-gray-700 border-red-600 text-red-400"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteAccountModal(false)}
+              className="border-red-600 bg-white text-red-600 hover:bg-red-600 hover:text-white"
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleDeleteAccount} className="bg-green-600 hover:bg-green-700">
+              {otpSent.delete ? "Delete Account" : "Send OTP"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
-
-export default Dashboard

@@ -16,7 +16,7 @@ export async function GET(request) {
 
     // --- Debugging NextAuth Database (assuming MONGODB_URI points here, e.g., 'test') ---
     try {
-      const nextAuthDb = client.db() // Get the default database from MONGODB_URI
+      const nextAuthDb = client.db("fuelmywork") // Get the default database from MONGODB_URI
       const nextAuthDbName = nextAuthDb.databaseName
       result.databaseConnections.nextAuth = {
         name: nextAuthDbName,

@@ -1,72 +1,114 @@
+import { getServerSession } from "next-auth"
+import { authOptions } from "../../auth/[...nextauth]/route"
 import clientPromise from "@/lib/mongodb"
-import { NextResponse } from "next/server"
+import { ObjectId } from "mongodb"
 
-export async function GET(request) {
+export async function GET(req) {
+  const session = await getServerSession(authOptions)
+
+  if (!session || !session.user || !session.user.id) {
+    return new Response(JSON.stringify({ message: "Not authenticated" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    })
+  }
+
+  if (!ObjectId.isValid(session.user.id)) {
+    return new Response(JSON.stringify({ message: "Invalid user ID format" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    })
+  }
+
   try {
-    const { searchParams } = new URL(request.url)
-    const username = searchParams.get("username")
-
-    console.log("=== CREATOR STATS DEBUG ===")
-    console.log("Fetching stats for creator:", username)
-
-    if (!username) {
-      return NextResponse.json({ error: "Username is required" }, { status: 400 })
-    }
-
     const client = await clientPromise
     const db = client.db("fuelmywork")
-    const supportersCollection = db.collection("supporters")
+    const paymentsCollection = db.collection("payments")
 
-    const cleanUsername = username.toLowerCase().trim()
-    console.log("Clean username:", cleanUsername)
+    const creatorId = new ObjectId(session.user.id)
 
-    // Get all supporters for this creator
-    const allSupporters = await supportersCollection.find({ creatorUsername: cleanUsername }).toArray()
-
-    console.log("Total supporters found:", allSupporters.length)
-    console.log(
-      "Sample supporters:",
-      allSupporters.slice(0, 3).map((s) => ({
-        name: s.name,
-        amount: s.amount,
-        verified: s.verified,
-        paymentMethod: s.paymentMethod,
-        createdAt: s.createdAt,
-      })),
-    )
-
-    // Calculate stats
-    const verifiedSupporters = allSupporters.filter((s) => s.verified === true)
-    const pendingSupporters = allSupporters.filter((s) => s.verified === false)
-
-    console.log("Verified supporters:", verifiedSupporters.length)
-    console.log("Pending supporters:", pendingSupporters.length)
-
-    const totalSupporters = verifiedSupporters.length
-    const totalEarned = verifiedSupporters.reduce((sum, s) => sum + (s.amount || 0), 0)
-    const pendingVerification = pendingSupporters.length
-
-    // Calculate this month's earnings
+    // Get current month start and end dates
     const now = new Date()
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-    const thisMonthSupporters = verifiedSupporters.filter((s) => new Date(s.createdAt) >= startOfMonth)
-    const thisMonth = thisMonthSupporters.reduce((sum, s) => sum + (s.amount || 0), 0)
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
 
-    const stats = {
-      totalSupporters,
-      totalEarned,
-      thisMonth,
-      pendingVerification,
+    // Monthly earnings
+    const monthlyEarningsResult = await paymentsCollection
+      .aggregate([
+        {
+          $match: {
+            creatorId: creatorId,
+            status: "completed",
+            createdAt: { $gte: monthStart, $lte: monthEnd },
+          },
+        },
+        { $group: { _id: null, total: { $sum: "$amount" } } },
+      ])
+      .toArray()
+    const monthlyEarnings = monthlyEarningsResult.length > 0 ? monthlyEarningsResult[0].total : 0
+
+    // Total earnings
+    const totalEarningsResult = await paymentsCollection
+      .aggregate([
+        { $match: { creatorId: creatorId, status: "completed" } },
+        { $group: { _id: null, total: { $sum: "$amount" } } },
+      ])
+      .toArray()
+    const totalEarnings = totalEarningsResult.length > 0 ? totalEarningsResult[0].total : 0
+
+    // Total supporters (unique supporters)
+    const totalSupportersResult = await paymentsCollection
+      .aggregate([
+        { $match: { creatorId: creatorId, status: "completed" } },
+        { $group: { _id: "$supporterId" } },
+        { $count: "count" },
+      ])
+      .toArray()
+    const totalSupporters = totalSupportersResult.length > 0 ? totalSupportersResult[0].count : 0
+
+    // Latest payments
+    const latestPayments = await paymentsCollection
+      .find(
+        { creatorId: creatorId, status: "completed" },
+        { projection: { amount: 1, supporterId: 1, message: 1, createdAt: 1 } },
+      )
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .toArray()
+
+    // Fetch supporter names for latest payments
+    const supporterIds = [...new Set(latestPayments.map((p) => p.supporterId.toString()))].map((id) => new ObjectId(id))
+    const usersCollection = db.collection("users")
+    const supportersMap = new Map()
+    if (supporterIds.length > 0) {
+      const supporters = await usersCollection
+        .find({ _id: { $in: supporterIds } }, { projection: { name: 1, username: 1 } })
+        .toArray()
+      supporters.forEach((s) => supportersMap.set(s._id.toString(), s.name || s.username || "Anonymous"))
     }
 
-    console.log("Calculated stats:", stats)
-    console.log("=== END CREATOR STATS DEBUG ===")
+    const paymentsWithNames = latestPayments.map((p) => ({
+      ...p,
+      supporterName: supportersMap.get(p.supporterId.toString()) || "Anonymous",
+    }))
 
-    return NextResponse.json(stats)
+    return new Response(
+      JSON.stringify({
+        totalEarnings,
+        monthlyEarnings,
+        totalSupporters,
+        latestPayments: paymentsWithNames,
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      },
+    )
   } catch (error) {
-    console.error("=== CREATOR STATS ERROR ===")
     console.error("Error fetching creator stats:", error)
-    console.error("Stack:", error.stack)
-    return NextResponse.json({ error: "Failed to fetch stats" }, { status: 500 })
+    return new Response(JSON.stringify({ message: "Internal server error", error: error.message }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    })
   }
 }

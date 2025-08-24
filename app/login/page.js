@@ -1,55 +1,37 @@
 "use client"
 
+import { useState, useEffect } from "react"
+import { signIn } from "next-auth/react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Github, ArrowLeft, Loader2, Mail, Lock } from "lucide-react"
-import { useAuth } from "@/contexts/AuthContext"
-import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { signIn } from "next-auth/react"
+import { Loader2, Github, Eye, EyeOff } from "lucide-react"
+import Link from "next/link"
 
-const Login = () => {
-  const { user, loading } = useAuth()
-  const router = useRouter()
-  const [signingIn, setSigningIn] = useState(false)
+export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const router = useRouter()
+  const searchParams = useSearchParams()
 
   useEffect(() => {
-    // Redirect if already logged in
-    if (user && !loading) {
-      router.push("/dashboard")
+    const message = searchParams.get("message")
+    if (message) {
+      toast.success(message)
     }
-  }, [user, loading, router])
+  }, [searchParams])
 
-  const handleGitHubLogin = async () => {
-    try {
-      setSigningIn(true)
-      toast.loading("Redirecting to GitHub...")
-      await signIn("github", { callbackUrl: "/dashboard" })
-    } catch (error) {
-      console.error("Login error:", error)
-      toast.error("Failed to sign in with GitHub")
-      setSigningIn(false)
-    }
-  }
-
-  const handleEmailLogin = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-
-    if (!email || !password) {
-      toast.error("Please fill in all fields")
-      return
-    }
+    setIsLoading(true)
 
     try {
-      setSigningIn(true)
-      toast.loading("Signing in...")
-
       const result = await signIn("credentials", {
         email,
         password,
@@ -58,174 +40,122 @@ const Login = () => {
 
       if (result?.error) {
         toast.error("Invalid email or password")
-      } else if (result?.ok) {
-        toast.success("Signed in successfully!")
+      } else {
+        toast.success("Welcome back!")
         router.push("/dashboard")
+        router.refresh()
       }
     } catch (error) {
       console.error("Login error:", error)
-      toast.error("Failed to sign in")
+      toast.error("An unexpected error occurred")
     } finally {
-      setSigningIn(false)
+      setIsLoading(false)
     }
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-950 text-white font-outfit flex items-center justify-center">
-        <div className="flex items-center gap-2">
-          <Loader2 className="h-6 w-6 animate-spin" />
-          <span>Loading...</span>
-        </div>
-      </div>
-    )
-  }
-
-  if (user) {
-    return null // Don't render login page if already logged in
+  const handleGitHubSignIn = async () => {
+    setIsLoading(true)
+    try {
+      await signIn("github", { callbackUrl: "/dashboard" })
+    } catch (error) {
+      console.error("GitHub sign-in error:", error)
+      toast.error("Failed to sign in with GitHub")
+      setIsLoading(false)
+    }
   }
 
   return (
-    <div className="min-h-[61.6vh] bg-gray-950 text-white font-outfit flex items-center justify-center px-6">
-      <div className="w-full max-w-md">
-        {/* Back to Home */}
-        <div className="mb-8">
-          <a href="/" className="flex items-center text-gray-400 hover:text-white transition-colors">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Home
-          </a>
-        </div>
-
-        <Card className="bg-gray-800/50 border-gray-700">
-          <CardHeader className="text-center">
-            {/* Logo */}
-            <div className="w-12 h-12 bg-gradient-to-br from-orange-500 via-red-500 to-yellow-500 rounded-lg flex items-center justify-center mx-auto mb-4">
-              <svg
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                className="text-white"
-              >
-                <path d="M12 2L13.09 8.26L20 9L13.09 9.74L12 16L10.91 9.74L4 9L10.91 8.26L12 2Z" fill="currentColor" />
-                <path
-                  d="M12 16L13.09 20.26L18 21L13.09 21.74L12 26L10.91 21.74L6 21L10.91 20.26L12 16Z"
-                  fill="currentColor"
-                  opacity="0.7"
+    <div className="min-h-[calc(100vh-64px)] bg-gray-950 text-white font-outfit flex items-center justify-center p-4">
+      <Card className="w-full max-w-md bg-gray-800 border-gray-700">
+        <CardHeader className="space-y-1">
+          <CardTitle className="text-2xl font-bold font-outfit text-center text-white">Welcome Back</CardTitle>
+          <CardDescription className="text-center text-gray-400">Sign in to your Fuelmywork account</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-gray-300">
+                Email
+              </Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="john@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="bg-gray-700 border-gray-600 text-white placeholder:text-gray-400"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password" className="text-gray-300">
+                Password
+              </Label>
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="bg-gray-700 border-gray-600 text-white placeholder:text-gray-400 pr-10"
                 />
-              </svg>
-            </div>
-            <CardTitle className="text-2xl font-bold text-white">Welcome to fuelmywork</CardTitle>
-            <CardDescription className="text-gray-300">
-              Sign in to start supporting creators or showcase your work
-            </CardDescription>
-          </CardHeader>
-
-          <CardContent className="space-y-4">
-            <Tabs defaultValue="email" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 bg-gray-700">
-                <TabsTrigger value="email" className="data-[state=active]:bg-gray-600">
-                  <Mail className="h-4 w-4 mr-2" />
-                  Email
-                </TabsTrigger>
-                <TabsTrigger value="github" className="data-[state=active]:bg-gray-600">
-                  <Github className="h-4 w-4 mr-2" />
-                  GitHub
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="email" className="space-y-4 mt-4">
-                <form onSubmit={handleEmailLogin} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email" className="text-gray-300">
-                      Email
-                    </Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="test@fuelmywork.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="bg-gray-700 border-gray-600 text-white"
-                      disabled={signingIn}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="password" className="text-gray-300">
-                      Password
-                    </Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      placeholder="testpassword123"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="bg-gray-700 border-gray-600 text-white"
-                      disabled={signingIn}
-                    />
-                  </div>
-
-                  <Button
-                    type="submit"
-                    disabled={signingIn}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center gap-3 py-3"
-                  >
-                    {signingIn ? <Loader2 className="h-5 w-5 animate-spin" /> : <Lock className="h-5 w-5" />}
-                    {signingIn ? "Signing in..." : "Sign in with Email"}
-                  </Button>
-                </form>
-
-                <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-3">
-                  <p className="text-blue-300 text-sm">
-                    <strong>Test Account:</strong>
-                    <br />
-                    Email: test@fuelmywork.com
-                    <br />
-                    Password: testpassword123
-                  </p>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="github" className="space-y-4 mt-4">
                 <Button
-                  onClick={handleGitHubLogin}
-                  disabled={signingIn}
-                  className="w-full bg-gray-700 hover:bg-gray-600 text-white border border-gray-600 flex items-center justify-center gap-3 py-3"
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-0 top-0 h-full px-3 text-gray-400 hover:text-white hover:bg-gray-500"
+                  onClick={() => setShowPassword(!showPassword)}
                 >
-                  {signingIn ? <Loader2 className="h-5 w-5 animate-spin" /> : <Github className="h-5 w-5" />}
-                  {signingIn ? "Signing in..." : "Continue with GitHub"}
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
-              </TabsContent>
-            </Tabs>
-
-            <div className="pt-4 text-center">
-              <p className="text-sm text-gray-400">
-                By signing in, you agree to our{" "}
-                <a href="/terms" className="text-blue-400 hover:text-blue-300">
-                  Terms of Service
-                </a>{" "}
-                and{" "}
-                <a href="/privacy" className="text-blue-400 hover:text-blue-300">
-                  Privacy Policy
-                </a>
-              </p>
+              </div>
             </div>
-          </CardContent>
-        </Card>
+            <div className="text-right">
+              <Link href="/forgot-password" className="text-sm text-orange-400 hover:text-orange-300 underline">
+                Forgot password?
+              </Link>
+            </div>
+            <Button type="submit" className="w-full bg-orange-600 hover:bg-orange-700 text-white" disabled={isLoading}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Signing in...
+                </>
+              ) : (
+                "Sign In"
+              )}
+            </Button>
+          </form>
 
-        <div className="mt-8 text-center">
-          <p className="text-gray-400 text-sm">
-            New to fuelmywork?{" "}
-            <a href="/about" className="text-blue-400 hover:text-blue-300">
-              Learn more about our platform
-            </a>
-          </p>
-        </div>
-      </div>
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <Separator className="w-full bg-gray-600" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-gray-800 px-2 text-gray-400">Or continue with</span>
+            </div>
+          </div>
+
+          <Button
+            onClick={handleGitHubSignIn}
+            variant="outline"
+            className="w-full border-gray-600 text-gray-300 bg-transparent hover:bg-gray-700 hover:text-gray-200"
+            disabled={isLoading}
+          >
+            <Github className="mr-2 h-4 w-4" />
+            GitHub
+          </Button>
+
+          <div className="text-center text-sm text-gray-400">
+            Don't have an account?{" "}
+            <Link href="/signup" className="text-orange-400 hover:text-orange-300 underline">
+              Sign up
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
-
-export default Login

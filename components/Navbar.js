@@ -24,11 +24,11 @@ const Navbar = () => {
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <div className="flex items-center space-x-3 flex-shrink-0">
-            <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center">
+            <div className="w-16 h-12 rounded-lg overflow-hidden flex items-center justify-center">
               <img
                 src="/fmw-logo.png"
                 alt="FuelMyWork Logo"
-                className="w-full h-full object-contain"
+                className="w-full h-full"
               />
             </div>
             <a

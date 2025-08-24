@@ -10,11 +10,11 @@ export default function Footer() {
           <div className="space-y-4 order-1">
             <div className="flex items-center space-x-3">
               {/* Logo */}
-              <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center">
+              <div className="w-20 h-16 rounded-lg overflow-hidden flex items-center justify-center">
                 <img
                   src="/fmw-logo.png"
                   alt="FuelMyWork Logo"
-                  className="w-full h-full object-contain"
+                  className="w-full h-full"
                 />
               </div>
               <h3 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">

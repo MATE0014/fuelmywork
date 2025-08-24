@@ -1,60 +1,66 @@
 import clientPromise from "@/lib/mongodb"
-import { NextResponse } from "next/server"
+import { ObjectId } from "mongodb"
 
-export async function POST(request) {
+export async function POST(req) {
   try {
-    const data = await request.json()
-    const { creatorUsername, supporterName, amount, message, paymentMethod, paymentId } = data
-
-    console.log("=== ADD SUPPORTER DEBUG ===")
-    console.log("Adding supporter:", { creatorUsername, supporterName, amount, paymentMethod, paymentId })
+    console.log("[v0] Add-supporter API called")
+    const { creatorUsername, supporterName, amount, message, paymentId, paymentMethod } = await req.json()
+    console.log("[v0] Payment data received:", { creatorUsername, supporterName, amount, paymentMethod, paymentId })
 
     if (!creatorUsername || !supporterName || !amount) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
-    }
-
-    if (Number.parseFloat(amount) < 1) {
-      return NextResponse.json({ error: "Amount must be at least ₹1" }, { status: 400 })
+      return new Response(JSON.stringify({ message: "Creator username, supporter name, and amount are required" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      })
     }
 
     const client = await clientPromise
     const db = client.db("fuelmywork")
-    const supportersCollection = db.collection("supporters")
+    const usersCollection = db.collection("users")
+    const paymentsCollection = db.collection("payments")
 
-    const supporterData = {
-      creatorUsername: creatorUsername.toLowerCase().trim(),
-      name: supporterName.trim(),
-      amount: Number.parseFloat(amount),
-      message: message?.trim() || "",
-      paymentMethod: paymentMethod || "direct",
-      paymentId: paymentId?.trim() || "",
-      createdAt: new Date(),
-      verified: paymentMethod === "direct" ? false : true, // Direct payments are unverified
-    }
-
-    console.log("Supporter data to save:", supporterData)
-
-    const result = await supportersCollection.insertOne(supporterData)
-
-    console.log("MongoDB insert result:", {
-      acknowledged: result.acknowledged,
-      insertedId: result.insertedId,
-    })
-
-    if (result.acknowledged) {
-      console.log("Supporter added successfully")
-      return NextResponse.json({
-        success: true,
-        message: "Supporter added successfully",
-        supporterId: result.insertedId,
+    const creator = await usersCollection.findOne({ username: creatorUsername })
+    if (!creator) {
+      return new Response(JSON.stringify({ message: "Creator not found" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
       })
-    } else {
-      throw new Error("Failed to insert supporter")
     }
+
+    console.log("[v0] Creator found:", creator._id)
+
+    const tempSupporterId = new ObjectId()
+
+    const paymentRecord = {
+      creatorId: creator._id,
+      supporterId: tempSupporterId,
+      supporterName: supporterName.trim(), // Store supporter name for display
+      amount: Number.parseFloat(amount),
+      message: message || "",
+      currency: "INR", // Changed from USD to INR for Indian payments
+      status: paymentMethod === "direct" ? "pending" : "completed",
+      paymentMethod: paymentMethod || "direct",
+      transactionId: paymentId || null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }
+
+    const result = await paymentsCollection.insertOne(paymentRecord)
+    console.log("[v0] Payment record created:", result.insertedId)
+    console.log("[v0] Payment record data:", paymentRecord)
+
+    return new Response(
+      JSON.stringify({ message: "Supporter record added successfully", paymentId: result.insertedId, success: true }),
+      {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      },
+    )
   } catch (error) {
-    console.error("=== ADD SUPPORTER ERROR ===")
-    console.error("Error adding supporter:", error)
-    console.error("Stack:", error.stack)
-    return NextResponse.json({ error: "Failed to add supporter: " + error.message }, { status: 500 })
+    console.error("Error adding supporter record:", error)
+    return new Response(JSON.stringify({ message: "Internal server error", error: error.message }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    })
   }
 }
