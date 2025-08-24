@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useAuth } from "@/contexts/AuthContext"
-import { signOut } from "next-auth/react"
+import { signOut, useSession } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -49,6 +49,7 @@ export default function DashboardPage() {
   const [originalData, setOriginalData] = useState({})
   const [usernameStatus, setUsernameStatus] = useState("")
   const [checkingUsername, setCheckingUsername] = useState(false)
+  const { data: session } = useSession()
 
   // Security modals
   const [passwordChangeModal, setPasswordChangeModal] = useState(false)
@@ -413,6 +414,12 @@ export default function DashboardPage() {
       return
     }
 
+    const isGitHubUser = !session?.user?.password
+    if (!isGitHubUser && !deleteAccountData.password) {
+      toast.error("Password is required")
+      return
+    }
+
     try {
       const response = await fetch("/api/auth/delete-account", {
         method: "POST",
@@ -619,7 +626,7 @@ export default function DashboardPage() {
                   onClick={refreshDashboard}
                   disabled={refreshing}
                   variant="outline"
-                  className="border-gray-600 text-gray-300 bg-transparent hover:bg-gray-700"
+                  className="border-blue-600 text-gray-300 bg-transparent hover:bg-gray-800 hover:text-white"
                 >
                   {refreshing ? (
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -708,49 +715,51 @@ export default function DashboardPage() {
 
           {/* Main Tabs */}
           <Tabs defaultValue="overview" className="space-y-4 md:space-y-6">
-            <TabsList className="bg-gray-800 border-gray-600 flex flex-wrap justify-start overflow-x-auto">
-              <TabsTrigger
-                value="overview"
-                className="text-gray-500 data-[state=active]:bg-gray-700 data-[state=active]:text-white flex-shrink-0"
-              >
-                Overview
-              </TabsTrigger>
-              <TabsTrigger
-                value="profile"
-                className="text-gray-500 data-[state=active]:bg-gray-700 data-[state=active]:text-white flex-shrink-0"
-              >
-                Profile Settings
-              </TabsTrigger>
-              <TabsTrigger
-                value="payments"
-                className="text-gray-500 data-[state=active]:bg-gray-700 data-[state=active]:text-white flex-shrink-0"
-              >
-                Payment Setup
-              </TabsTrigger>
-              <TabsTrigger
-                value="pending"
-                className="text-gray-500 data-[state=active]:bg-gray-700 data-[state=active]:text-white flex-shrink-0"
-              >
-                Payment Verification
-                {pendingPayments.length > 0 && (
-                  <span className="ml-2 bg-yellow-500 text-black text-xs px-2 py-0.5 rounded-full">
-                    {pendingPayments.length}
-                  </span>
-                )}
-              </TabsTrigger>
-              <TabsTrigger
-                value="security"
-                className="text-gray-500 data-[state=active]:bg-gray-700 data-[state=active]:text-white flex-shrink-0"
-              >
-                Security
-              </TabsTrigger>
-              <TabsTrigger
-                value="logs"
-                className="text-gray-500 data-[state=active]:bg-gray-700 data-[state=active]:text-white flex-shrink-0"
-              >
-                Payment Logs
-              </TabsTrigger>
-            </TabsList>
+            <div className="overflow-x-auto">
+              <TabsList className="bg-gray-800 border-gray-600 flex w-max min-w-full gap-1 p-1">
+                <TabsTrigger
+                  value="overview"
+                  className="text-gray-500 data-[state=active]:bg-gray-700 data-[state=active]:text-white whitespace-nowrap px-3 py-2 text-sm"
+                >
+                  Overview
+                </TabsTrigger>
+                <TabsTrigger
+                  value="profile"
+                  className="text-gray-500 data-[state=active]:bg-gray-700 data-[state=active]:text-white whitespace-nowrap px-3 py-2 text-sm"
+                >
+                  Profile Settings
+                </TabsTrigger>
+                <TabsTrigger
+                  value="payments"
+                  className="text-gray-500 data-[state=active]:bg-gray-700 data-[state=active]:text-white whitespace-nowrap px-3 py-2 text-sm"
+                >
+                  Payment Setup
+                </TabsTrigger>
+                <TabsTrigger
+                  value="pending"
+                  className="text-gray-500 data-[state=active]:bg-gray-700 data-[state=active]:text-white whitespace-nowrap px-3 py-2 text-sm"
+                >
+                  Payment Verification
+                  {pendingPayments.length > 0 && (
+                    <span className="ml-2 bg-yellow-500 text-black text-xs px-2 py-0.5 rounded-full">
+                      {pendingPayments.length}
+                    </span>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger
+                  value="security"
+                  className="text-gray-500 data-[state=active]:bg-gray-700 data-[state=active]:text-white whitespace-nowrap px-3 py-2 text-sm"
+                >
+                  Security
+                </TabsTrigger>
+                <TabsTrigger
+                  value="logs"
+                  className="text-gray-500 data-[state=active]:bg-gray-700 data-[state=active]:text-white whitespace-nowrap px-3 py-2 text-sm"
+                >
+                  Payment Logs
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
             {/* Overview Tab */}
             <TabsContent value="overview" className="space-y-4 md:space-y-6">
@@ -862,15 +871,17 @@ export default function DashboardPage() {
                   />
 
                   {/* Profile Image */}
-                  <ImageUpload
-                    currentImage={formData.profileImage}
-                    onImageUpdate={(imageUrl) => handleInputChange("profileImage", imageUrl)}
-                    aspect={1}
-                    circularCrop={true}
-                    title="Profile Image"
-                    description="Click to upload and crop profile image (square ratio recommended)"
-                    size="medium"
-                  />
+                  <div className="max-w-fit">
+                    <ImageUpload
+                      currentImage={formData.profileImage}
+                      onImageUpdate={(imageUrl) => handleInputChange("profileImage", imageUrl)}
+                      aspect={1}
+                      circularCrop={true}
+                      title="Profile Image"
+                      description="Click to upload and crop profile image (square ratio recommended)"
+                      size="medium"
+                    />
+                  </div>
 
                   {/* Username */}
                   <div className="space-y-2">
@@ -935,7 +946,7 @@ export default function DashboardPage() {
                     <Button
                       onClick={resetChanges}
                       variant="outline"
-                      className="border-gray-600 bg-gray-700/50 text-gray-300 hover:bg-gray-600 w-full sm:w-auto"
+                      className="border-blue-600 bg-gray-700/50 text-gray-300 hover:bg-gray-600 hover:text-white w-full sm:w-auto "
                       size="sm"
                     >
                       Reset Changes
@@ -1067,15 +1078,17 @@ export default function DashboardPage() {
                   </div>
 
                   {/* QR Code Image */}
-                  <ImageUpload
-                    currentImage={formData.qrCodeImage}
-                    onImageUpdate={(imageUrl) => handleInputChange("qrCodeImage", imageUrl)}
-                    aspect={1}
-                    circularCrop={false}
-                    title="Payment QR Code"
-                    description="Upload your payment QR code (will be cropped to square format)"
-                    size="large"
-                  />
+                  <div className="max-w-fit">
+                    <ImageUpload
+                      currentImage={formData.qrCodeImage}
+                      onImageUpdate={(imageUrl) => handleInputChange("qrCodeImage", imageUrl)}
+                      aspect={1}
+                      circularCrop={false}
+                      title="Payment QR Code"
+                      description="Upload your payment QR code (will be cropped to square format)"
+                      size="large"
+                    />
+                  </div>
 
                   {/* Current Status */}
                   {(formData.qrCodeImage || formData.upiId) && (
@@ -1096,7 +1109,7 @@ export default function DashboardPage() {
                     <Button
                       onClick={resetChanges}
                       variant="outline"
-                      className="border-gray-600 bg-gray-700/50 text-gray-300 hover:bg-gray-600 w-full sm:w-auto"
+                      className="border-blue-600 bg-gray-700/50 text-gray-300 hover:bg-gray-600 hover:text-white w-full sm:w-auto "
                       size="sm"
                     >
                       Reset Changes
@@ -1292,11 +1305,7 @@ export default function DashboardPage() {
               </Card>
             </TabsContent>
 
-            <TabsContent
-              value="logs"
-              className="space-y-4 md:space-y-6"
-              style={{ maxHeight: "60vh", overflowY: "auto" }}
-            >
+            <TabsContent value="logs" className="space-y-4 md:space-y-6">
               <Card className="bg-gray-800 border-gray-600">
                 <CardHeader>
                   <CardTitle className="text-white flex items-center gap-2">
@@ -1307,7 +1316,7 @@ export default function DashboardPage() {
                     Complete history of all payment activities and status changes
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="max-h-[60vh] overflow-y-auto">
                   {loadingLogs ? (
                     <div className="flex items-center justify-center py-8">
                       <Loader2 className="h-8 w-8 animate-spin text-blue-400" />
@@ -1316,34 +1325,34 @@ export default function DashboardPage() {
                   ) : paymentLogs.length > 0 ? (
                     <div className="space-y-4">
                       {paymentLogs.map((log) => (
-                        <div key={log._id} className="border border-gray-700 rounded-lg p-4 space-y-3">
-                          <div className="flex items-start justify-between">
-                            <div className="space-y-2 flex-1">
-                              <div className="flex items-center gap-3">
-                                <span className={`font-semibold ${log.actionColor}`}>{log.action}</span>
-                                <span className="text-gray-400">•</span>
-                                <span className="text-white font-medium">{log.supporterName}</span>
-                                <span className="text-green-400 font-bold">₹{log.amount}</span>
+                        <div key={log._id} className="border border-gray-700 rounded-lg p-3 md:p-4 space-y-3">
+                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                            <div className="space-y-2 flex-1 min-w-0">
+                              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                                <span className={`font-semibold text-sm ${log.actionColor}`}>{log.action}</span>
+                                <span className="hidden sm:inline text-gray-400">•</span>
+                                <span className="text-white font-medium text-sm truncate">{log.supporterName}</span>
+                                <span className="text-green-400 font-bold text-sm">₹{log.amount}</span>
                               </div>
 
                               {log.transactionId && (
-                                <div className="flex items-center gap-2 text-sm">
-                                  <span className="text-gray-400">Transaction ID:</span>
-                                  <span className="text-gray-300 font-mono bg-gray-700 px-2 py-1 rounded text-xs">
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-xs">
+                                  <span className="text-gray-400 flex-shrink-0">Transaction ID:</span>
+                                  <span className="text-gray-300 font-mono bg-gray-700 px-2 py-1 rounded text-xs break-all">
                                     {log.transactionId}
                                   </span>
                                 </div>
                               )}
 
                               {log.message && (
-                                <div className="text-sm">
+                                <div className="text-xs sm:text-sm">
                                   <span className="text-gray-400">Message:</span>
-                                  <p className="text-gray-300 italic mt-1">"{log.message}"</p>
+                                  <p className="text-gray-300 italic mt-1 break-words">"{log.message}"</p>
                                 </div>
                               )}
 
-                              <div className="flex items-center gap-4 text-xs text-gray-500">
-                                <div>
+                              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-xs text-gray-500">
+                                <div className="flex-shrink-0">
                                   <span className="text-gray-400">Received:</span>{" "}
                                   {new Date(log.createdAt || Date.now()).toLocaleDateString("en-IN", {
                                     year: "numeric",
@@ -1354,7 +1363,7 @@ export default function DashboardPage() {
                                   })}
                                 </div>
                                 {log.updatedAt && log.updatedAt !== log.createdAt && (
-                                  <div>
+                                  <div className="flex-shrink-0">
                                     <span className="text-gray-400">Updated:</span>{" "}
                                     {new Date(log.updatedAt).toLocaleDateString("en-IN", {
                                       year: "numeric",
@@ -1368,14 +1377,14 @@ export default function DashboardPage() {
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center justify-between sm:justify-end gap-2 flex-shrink-0">
                               {log.paymentMethod && (
-                                <span className="text-xs bg-gray-700 text-gray-300 px-2 py-1 rounded">
+                                <span className="text-xs bg-gray-700 text-gray-300 px-2 py-1 rounded whitespace-nowrap">
                                   {log.paymentMethod === "direct" ? "Direct/UPI" : log.paymentMethod}
                                 </span>
                               )}
                               <div
-                                className={`w-3 h-3 rounded-full ${
+                                className={`w-3 h-3 rounded-full flex-shrink-0 ${
                                   log.status === "completed"
                                     ? "bg-green-400"
                                     : log.status === "rejected"
@@ -1537,31 +1546,32 @@ export default function DashboardPage() {
             <DialogTitle>Delete Account</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            {/* Password */}
-            <div className="space-y-2">
-              <Label className="text-gray-300">Password</Label>
-              <div className="relative">
-                <Input
-                  type={passwordVisibility.deletePassword ? "text" : "password"}
-                  value={deleteAccountData.password}
-                  onChange={(e) => setDeleteAccountData((prev) => ({ ...prev, password: e.target.value }))}
-                  className="bg-gray-700 border-gray-600 text-white pr-10"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                  onClick={() => setPasswordVisibility((prev) => ({ ...prev, deletePassword: !prev.deletePassword }))}
-                >
-                  {passwordVisibility.deletePassword ? (
-                    <EyeOff className="h-4 w-4 text-gray-400" />
-                  ) : (
-                    <Eye className="h-4 w-4 text-gray-400" />
-                  )}
-                </Button>
+            {session?.user?.password && (
+              <div className="space-y-2">
+                <Label className="text-gray-300">Password</Label>
+                <div className="relative">
+                  <Input
+                    type={passwordVisibility.deletePassword ? "text" : "password"}
+                    value={deleteAccountData.password}
+                    onChange={(e) => setDeleteAccountData((prev) => ({ ...prev, password: e.target.value }))}
+                    className="bg-gray-700 border-gray-600 text-white pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                    onClick={() => setPasswordVisibility((prev) => ({ ...prev, deletePassword: !prev.deletePassword }))}
+                  >
+                    {passwordVisibility.deletePassword ? (
+                      <EyeOff className="h-4 w-4 text-gray-400" />
+                    ) : (
+                      <Eye className="h-4 w-4 text-gray-400" />
+                    )}
+                  </Button>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* OTP Verification */}
             {otpSent.delete && (

@@ -31,12 +31,14 @@ export async function POST(request) {
       return NextResponse.json({ message: "User not found" }, { status: 404 })
     }
 
+    const isGitHubUser = !user.password
+
     // For credentials users, verify password
-    if (user.password && !password) {
+    if (!isGitHubUser && !password) {
       return NextResponse.json({ message: "Password is required for account deletion" }, { status: 400 })
     }
 
-    if (user.password && password) {
+    if (!isGitHubUser && password) {
       const isPasswordValid = await bcrypt.compare(password, user.password)
       if (!isPasswordValid) {
         return NextResponse.json({ message: "Incorrect password" }, { status: 400 })

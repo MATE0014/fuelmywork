@@ -86,7 +86,7 @@ function LoginForm() {
               <Input
                 id="email"
                 type="email"
-                placeholder="john@example.com"
+                placeholder="sign.in@gmail.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -111,7 +111,7 @@ function LoginForm() {
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="absolute right-0 top-0 h-full px-3 text-gray-400 hover:text-white hover:bg-gray-500"
+                  className="absolute right-0 top-0 h-full px-3 text-gray-400 hover:text-white hover:bg-transparent"
                   onClick={() => setShowPassword(!showPassword)}
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -119,11 +119,11 @@ function LoginForm() {
               </div>
             </div>
             <div className="text-right">
-              <Link href="/forgot-password" className="text-sm text-orange-400 hover:text-orange-300 underline">
+              <Link href="/forgot-password" className="text-sm text-blue-400 hover:text-blue-300 underline">
                 Forgot password?
               </Link>
             </div>
-            <Button type="submit" className="w-full bg-orange-600 hover:bg-orange-700 text-white" disabled={isLoading}>
+            <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-gray-200 hover:text-white" disabled={isLoading}>
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -156,7 +156,7 @@ function LoginForm() {
 
           <div className="text-center text-sm text-gray-400">
             Don't have an account?{" "}
-            <Link href="/signup" className="text-orange-400 hover:text-orange-300 underline">
+            <Link href="/signup" className="text-blue-400 hover:text-blue-300 underline">
               Sign up
             </Link>
           </div>

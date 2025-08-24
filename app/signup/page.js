@@ -221,7 +221,7 @@ export default function SignUpPage() {
                 <Input
                   id="name"
                   type="text"
-                  placeholder="John Doe"
+                  placeholder="Rohit Sharma"
                   value={formData.name}
                   onChange={(e) => handleInputChange("name", e.target.value)}
                   required
@@ -236,7 +236,7 @@ export default function SignUpPage() {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="john@example.com"
+                  placeholder="rohitsh@gmail.com"
                   value={formData.email}
                   onChange={(e) => handleInputChange("email", e.target.value)}
                   required
@@ -262,7 +262,7 @@ export default function SignUpPage() {
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="absolute right-0 top-0 h-full px-3 text-gray-400 hover:text-white hover:bg-gray-500"
+                    className="absolute right-0 top-0 h-full px-3 text-gray-400 hover:text-white hover:bg-transparent"
                     onClick={() => setShowPassword(!showPassword)}
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -288,7 +288,7 @@ export default function SignUpPage() {
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="absolute right-0 top-0 h-full px-3 text-gray-400 hover:text-white hover:bg-gray-500"
+                    className="absolute right-0 top-0 h-full px-3 text-gray-400 hover:text-white hover:bg-transparent"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   >
                     {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -298,7 +298,7 @@ export default function SignUpPage() {
 
               <Button
                 type="submit"
-                className="w-full bg-orange-600 hover:bg-orange-700 text-white"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                 disabled={isLoading}
               >
                 {isLoading ? (
@@ -314,7 +314,7 @@ export default function SignUpPage() {
           ) : (
             <form onSubmit={handleVerifyOTP} className="space-y-4">
               <div className="text-center mb-6">
-                <Mail className="h-12 w-12 text-orange-500 mx-auto mb-4" />
+                <Mail className="h-12 w-12 text-blue-500 mx-auto mb-4" />
                 <p className="text-gray-300 text-sm">
                   We've sent a 6-digit verification code to your email address. Please check your inbox and enter the
                   code below.
@@ -339,7 +339,7 @@ export default function SignUpPage() {
 
               <Button
                 type="submit"
-                className="w-full bg-orange-600 hover:bg-orange-700 text-white"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                 disabled={isLoading || otp.length !== 6}
               >
                 {isLoading ? (
@@ -359,7 +359,7 @@ export default function SignUpPage() {
                   variant="ghost"
                   onClick={handleResendOTP}
                   disabled={!canResend || isLoading}
-                  className="text-orange-400 hover:text-orange-300"
+                  className="text-blue-400 hover:text-blue-300"
                 >
                   {!canResend ? (
                     <>
@@ -386,7 +386,7 @@ export default function SignUpPage() {
 
           <div className="text-center text-sm text-gray-400">
             Already have an account?{" "}
-            <Link href="/login" className="text-orange-400 hover:text-orange-300 underline">
+            <Link href="/login" className="text-blue-400 hover:text-blue-300 underline">
               Sign in
             </Link>
           </div>
