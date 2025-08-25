@@ -1150,19 +1150,19 @@ export default function DashboardPage() {
                   {pendingPayments.length > 0 ? (
                     <div className="space-y-4">
                       {pendingPayments.map((payment) => (
-                        <div key={payment._id} className="border border-gray-700 rounded-lg p-4 space-y-3">
-                          <div className="flex items-start justify-between">
-                            <div className="space-y-2">
-                              <div className="flex items-center gap-2">
-                                <User className="h-4 w-4 text-gray-400" />
-                                <span className="font-semibold text-white">{payment.supporterName}</span>
-                                <span className="text-green-400 font-bold">₹{payment.amount}</span>
+                        <div key={payment._id} className="border border-gray-700 rounded-lg p-3 md:p-4 space-y-3">
+                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
+                            <div className="space-y-2 flex-1 min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <User className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                                <span className="font-semibold text-white truncate">{payment.supporterName}</span>
+                                <span className="text-green-400 font-bold whitespace-nowrap">₹{payment.amount}</span>
                               </div>
 
                               {payment.transactionId && (
-                                <div className="flex items-center gap-2 text-sm">
-                                  <span className="text-gray-400">Transaction ID:</span>
-                                  <span className="text-gray-300 font-mono bg-gray-700 px-2 py-1 rounded">
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-sm">
+                                  <span className="text-gray-400 whitespace-nowrap">Transaction ID:</span>
+                                  <span className="text-gray-300 font-mono bg-gray-700 px-2 py-1 rounded text-xs sm:text-sm break-all">
                                     {payment.transactionId}
                                   </span>
                                 </div>
@@ -1171,7 +1171,7 @@ export default function DashboardPage() {
                               {payment.message && (
                                 <div className="text-sm">
                                   <span className="text-gray-400">Message:</span>
-                                  <p className="text-gray-300 italic mt-1">"{payment.message}"</p>
+                                  <p className="text-gray-300 italic mt-1 break-words">"{payment.message}"</p>
                                 </div>
                               )}
 
@@ -1187,19 +1187,19 @@ export default function DashboardPage() {
                               </div>
                             </div>
 
-                            <div className="flex gap-2">
+                            <div className="flex flex-col sm:flex-row gap-2 sm:gap-2 w-full sm:w-auto">
                               <Button
                                 onClick={() => verifyPayment(payment._id, "reject")}
                                 variant="outline"
                                 size="sm"
-                                className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white"
+                                className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white w-full sm:w-auto"
                               >
                                 Reject
                               </Button>
                               <Button
                                 onClick={() => verifyPayment(payment._id, "approve")}
                                 size="sm"
-                                className="bg-green-600 hover:bg-green-700"
+                                className="bg-green-600 hover:bg-green-700 w-full sm:w-auto"
                               >
                                 <CheckCircle className="h-4 w-4 mr-1" />
                                 Approve
@@ -1246,7 +1246,7 @@ export default function DashboardPage() {
                         </div>
                         <Button
                           onClick={() => setPasswordChangeModal(true)}
-                          className="bg-green-600 hover:bg-green-700"
+                          className="bg-green-600 hover:bg-green-700 w-[8rem]"
                         >
                           Change Password
                         </Button>

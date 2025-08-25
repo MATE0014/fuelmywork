@@ -3,11 +3,30 @@
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/contexts/AuthContext"
 import { Loader2, Menu, X } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 
 const Navbar = () => {
   const { user, logout, loading } = useAuth()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [profileImage, setProfileImage] = useState(null)
+
+  useEffect(() => {
+    const fetchProfileImage = async () => {
+      if (user && user.id) {
+        try {
+          const response = await fetch("/api/user/profile")
+          if (response.ok) {
+            const profileData = await response.json()
+            setProfileImage(profileData.profileImage)
+          }
+        } catch (error) {
+          console.error("Error fetching profile image:", error)
+        }
+      }
+    }
+
+    fetchProfileImage()
+  }, [user])
 
   const handleLogout = async () => {
     await logout()
@@ -25,11 +44,7 @@ const Navbar = () => {
           {/* Logo */}
           <div className="flex items-center space-x-3 flex-shrink-0">
             <div className="w-16 h-12 rounded-lg overflow-hidden flex items-center justify-center">
-              <img
-                src="/fmw-logo.png"
-                alt="FuelMyWork Logo"
-                className="w-full h-full"
-              />
+              <img src="/fmw-logo.png" alt="FuelMyWork Logo" className="w-full h-full" />
             </div>
             <a
               href="/"
@@ -57,9 +72,12 @@ const Navbar = () => {
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
                   <img
-                    src={user.image || "/placeholder.svg?height=32&width=32"}
+                    src={profileImage || user.image || "/placeholder-user.jpg"}
                     alt={user.name}
-                    className="w-8 h-8 rounded-full border border-gray-600"
+                    className="w-8 h-8 rounded-full border border-gray-600 object-cover"
+                    onError={(e) => {
+                      e.target.src = "/placeholder-user.jpg"
+                    }}
                   />
                   <span className="text-sm text-gray-300 hidden lg:block">Hi, {user.name?.split(" ")[0]}</span>
                 </div>
@@ -128,9 +146,12 @@ const Navbar = () => {
               <div className="space-y-4 pt-4 border-t border-gray-700">
                 <div className="flex items-center gap-3">
                   <img
-                    src={user.image || "/placeholder.svg?height=40&width=40"}
+                    src={profileImage || user.image || "/placeholder-user.jpg"}
                     alt={user.name}
-                    className="w-10 h-10 rounded-full border border-gray-600"
+                    className="w-10 h-10 rounded-full border border-gray-600 object-cover"
+                    onError={(e) => {
+                      e.target.src = "/placeholder-user.jpg"
+                    }}
                   />
                   <div>
                     <p className="text-white font-medium">{user.name}</p>
@@ -138,7 +159,9 @@ const Navbar = () => {
                   </div>
                 </div>
                 <a href="/dashboard" onClick={closeMobileMenu}>
-                  <Button className="bg-blue-600 hover:bg-blue-700 text-white font-outfit w-full my-4">Dashboard</Button>
+                  <Button className="bg-blue-600 hover:bg-blue-700 text-white font-outfit w-full my-4">
+                    Dashboard
+                  </Button>
                 </a>
                 <Button
                   variant="outline"
