@@ -82,6 +82,9 @@ export async function POST(request) {
 
     // If no OTP provided, send OTP to email
     const otpCode = generateOTP()
+  
+
+    
     const otpExpires = new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
 
     await usersCollection.updateOne(

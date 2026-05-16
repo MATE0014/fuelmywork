@@ -92,6 +92,7 @@ export async function POST(req) {
       )
     }
 
+
     console.log("OTP email sent successfully via Brevo")
 
     // Store pending user (upsert to handle re-registration)
@@ -103,7 +104,7 @@ export async function POST(req) {
 
     return new Response(
       JSON.stringify({
-        message: "Registration successful! Please check your email for the verification code.",
+        message: "Registration successful! Please check your email for the verification code.",  
         email: email.toLowerCase(),
         success: true,
       }),
